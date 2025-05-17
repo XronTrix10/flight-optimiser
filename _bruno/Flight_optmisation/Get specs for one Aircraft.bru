@@ -5,11 +5,15 @@ meta {
 }
 
 get {
-  url: {{URL}}/api/aircraft/Jet?mtow_kg=55364.15
+  url: {{URL}}/api/aircraft/:model?mtow_kg=55364.15
   body: none
   auth: inherit
 }
 
 params:query {
   mtow_kg: 55364.15
+}
+
+params:path {
+  model: Jet
 }
