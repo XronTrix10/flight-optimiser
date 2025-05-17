@@ -1,77 +1,94 @@
+# services/weather_service.py
 import logging
-from typing import List, Dict, Any
+import random
 import asyncio
-from api.weather_api import WeatherAPI
+from typing import Dict, Any, List, Optional
 from models.route import Route
-from models.weather_data import WeatherData
+from models.waypoint import Waypoint
 
 logger = logging.getLogger(__name__)
 
 
 class WeatherService:
-    """Service for fetching and processing weather data."""
+    """Service to retrieve weather data for flight routes."""
 
     def __init__(self):
-        self.weather_api = WeatherAPI()
+        self.cache = {}
+        self.api_key = "your_weather_api_key"  # Replace with actual API key
 
-    async def update_route_weather(self, route: Route) -> Route:
-        """Fetch and update weather data for all waypoints in a route."""
-        logger.info(f"Updating weather data for route: {route.name}")
+    async def get_weather_for_route(self, route: Route) -> Dict[str, Dict[str, Any]]:
+        """
+        Get weather data for all points along a route.
 
-        # Create tasks for fetching weather data for each waypoint
-        tasks = []
-        for waypoint in route.waypoints:
-            tasks.append(
-                self.weather_api.fetch_weather(waypoint.latitude, waypoint.longitude)
-            )
+        Args:
+            route: A Route object with waypoints
 
-        # Wait for all tasks to complete
-        weather_data_list = await asyncio.gather(*tasks)
+        Returns:
+            Dictionary mapping node keys to weather data dictionaries
+        """
+        logger.info(f"Fetching weather data for route {route.name}")
 
-        # Update each waypoint with its weather data
+        # Collect all points (origin, waypoints, destination)
+        all_points = []
+        if route.origin:
+            all_points.append(("origin", route.origin.latitude, route.origin.longitude))
+
         for i, waypoint in enumerate(route.waypoints):
-            waypoint.weather_data = weather_data_list[i].dict()
+            all_points.append((f"waypoint_{i}", waypoint.latitude, waypoint.longitude))
 
-        logger.info(
-            f"Updated weather data for {len(route.waypoints)} waypoints in route: {route.name}"
-        )
-
-        return route
-
-    def calculate_route_weather_score(self, route: Route) -> float:
-        """Calculate a weather score for the route (0-1, lower is better)."""
-        if not route.waypoints or not all(wp.weather_data for wp in route.waypoints):
-            logger.warning(
-                f"Cannot calculate weather score for route: {route.name} - missing weather data"
+        if route.destination:
+            all_points.append(
+                ("destination", route.destination.latitude, route.destination.longitude)
             )
-            return 0.5  # Default mid-range score
 
-        precipitation_total = 0
-        cloud_cover_total = 0
+        # Get weather for each point
+        weather_data = {}
+        for point_key, lat, lon in all_points:
+            # Check cache first
+            cache_key = f"{lat:.4f}_{lon:.4f}"
+            if cache_key in self.cache:
+                weather_data[point_key] = self.cache[cache_key]
+            else:
+                # In a real implementation, call weather API here
+                # For now, generate mock data
+                weather = await self._generate_mock_weather(lat, lon)
+                self.cache[cache_key] = weather
+                weather_data[point_key] = weather
 
-        for waypoint in route.waypoints:
-            weather = waypoint.weather_data
-            if weather:
-                precipitation_total += (
-                    weather.get("precipitation", 0) / 20
-                )  # Normalize to 0-1 (assuming 20mm is max)
-                cloud_cover_total += weather.get("cloudcover", 0) / 100  # Already 0-100
+                # Simulate API rate limiting
+                await asyncio.sleep(0.1)
 
-        # Average the scores across all waypoints
-        waypoint_count = len(route.waypoints)
-        precipitation_score = precipitation_total / waypoint_count
-        cloud_cover_score = cloud_cover_total / waypoint_count
+        return weather_data
 
-        # Combine scores with weights from environment variables
-        import os
+    async def _generate_mock_weather(self, lat: float, lon: float) -> Dict[str, Any]:
+        """Generate mock weather data for testing."""
+        # Use lat/lon to create somewhat realistic variations
+        temp_base = 20 - (abs(lat) / 90) * 30  # Colder at higher latitudes
 
-        precip_weight = float(os.getenv("PRECIPITATION_WEIGHT", 0.6))
-        cloud_weight = float(os.getenv("CLOUD_COVER_WEIGHT", 0.4))
+        return {
+            "temperature_2m": round(temp_base + random.uniform(-5, 5), 1),
+            "precipitation": round(random.uniform(0, 20), 1),
+            "rain": round(random.uniform(0, 10), 1),
+            "showers": round(random.uniform(0, 10), 1),
+            "snowfall": round(random.uniform(0, 5), 1),
+            "cloud_cover": random.randint(0, 100),
+            "cloud_cover_high": random.randint(0, 100),
+            "weather_code": random.randint(0, 100),
+            "visibility": round(random.uniform(1000, 10000), 1),
+            "wind_speed_10m": round(random.uniform(0, 50), 1),
+            "wind_direction_10m": random.randint(0, 360),
+            "jet_stream_speed_250hPa": round(random.uniform(50, 150), 1),
+            "jet_stream_direction_250hPa": random.randint(0, 360),
+            "vertical_velocity_250hPa": round(random.uniform(-2, 2), 1),
+            "cape": round(random.uniform(0, 2000), 1),
+            "temperature_500hPa": round(random.uniform(-50, 0), 1),
+            "relative_humidity_500hPa": random.randint(0, 100),
+            "temperature_700hPa": round(random.uniform(-20, 10), 1),
+            "relative_humidity_700hPa": random.randint(0, 100),
+        }
 
-        weather_score = (precipitation_score * precip_weight) + (
-            cloud_cover_score * cloud_weight
-        )
-
-        logger.debug(f"Weather score for route {route.name}: {weather_score:.4f}")
-
-        return weather_score
+    async def get_current_conditions(self, airport_code: str) -> Dict[str, Any]:
+        """Get current weather conditions at an airport."""
+        # In a real implementation, fetch airport coordinates and call weather API
+        # For now, return mock data
+        return await self._generate_mock_weather(0, 0)

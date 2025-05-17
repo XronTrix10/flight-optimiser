@@ -80,17 +80,17 @@ class AircraftAPI:
 
     async def get_aircraft(self, model: str, **specs) -> List[Aircraft]:
         """Return aircraft by case-insensitive model name and optional specifications.
-        
+
         Args:
             model: The aircraft model name (case-insensitive)
             **specs: Optional specifications to filter by (e.g. manufacturer, mtow_kg)
-            
+
         Returns:
             List of matching Aircraft objects, or empty list if none found
         """
         aircraft_list = await self.get_all_aircraft()
         matching_aircraft = []
-        
+
         for ac in aircraft_list:
             # First filter by model name (case-insensitive)
             if ac.model.lower() == model.lower():
@@ -98,7 +98,7 @@ class AircraftAPI:
                 if not specs:
                     matching_aircraft.append(ac)
                     continue
-                    
+
                 # If specs provided, check if all specs match
                 specs_match = True
                 for key, value in specs.items():
@@ -111,7 +111,7 @@ class AircraftAPI:
                             except ValueError:
                                 specs_match = False
                                 break
-                                
+
                         # Compare values
                         if ac_value != value:
                             specs_match = False
@@ -120,12 +120,11 @@ class AircraftAPI:
                         # If aircraft doesn't have the specified attribute
                         specs_match = False
                         break
-                        
+
                 if specs_match:
                     matching_aircraft.append(ac)
-                    
-        return matching_aircraft
 
+        return matching_aircraft
 
     # ------------------------------------------------------------------ #
     # Internal helpers
@@ -141,8 +140,11 @@ class AircraftAPI:
     def _save_json_cache(self, aircraft_list: List[Aircraft]) -> None:
         """Persist a pretty-printed JSON cache beside the CSV file."""
         try:
+            os.makedirs(
+                os.path.dirname(self.json_cache_file), exist_ok=True
+            )  # Create cache directory if it doesn't exist
             with open(self.json_cache_file, "w") as fh:
-                json.dump([ac.dict() for ac in aircraft_list], fh, indent=2)
+                json.dump([ac.to_dict() for ac in aircraft_list], fh, indent=2)
         except Exception as exc:  # pragma: no cover
             logger.warning("Could not write aircraft JSON cache: %s", exc)
 
@@ -154,26 +156,28 @@ class AircraftAPI:
 
         Column → Aircraft field mapping (+ unit conversions):
         ------------------------------------------------------
-        Engine_Type              ➜ model  (string)
-        *manufacturer*           ➜ 'Unknown' (CSV lacks this – change if you add a column)
+        Engine_Type              ➜ model  (we'll use this until we have a proper model field)
+        *manufacturer*           ➜ 'Unknown' (CSV lacks this - change if you add a column)
         MTOW_kg                  ➜ mtow_kg
         Range_km                 ➜ max_range_km
-        Cruise_Speed_knots       ➜ cruise_speed_kmh  (knots × 1.852)
+        Cruise_Speed_knots       ➜ cruise_speed_kmh  (knots x 1.852)
         Fuel_Capacity_L          ➜ fuel_capacity_liters
-        Fuel_Consumption_Rate_kg_hr ➜ fuel_consumption_lph  (≈ kg/h ≈ L/h for Jet-A)
-        Cruising_Altitude_ft     ➜ ceiling_m (ft × 0.3048)
+        Fuel_Consumption_Rate_kg_hr ➜ fuel_consumption_rate_kg_hr
+        Cruising_Altitude_ft     ➜ ceiling_m (ft x 0.3048)
 
         All remaining CSV columns are tucked into Aircraft.additional_specs
         for completeness.
         """
         # mandatory / mapped fields
-        model = str(row.get("Engine_Type", "Unknown")).strip()
+        model = str(
+            row.get("Engine_Type", "Unknown")
+        ).strip()  # We'll use Engine_Type as model for now
         manufacturer = "Unknown"
         mtow_kg = float(row.get("MTOW_kg", 0))
         max_range_km = float(row.get("Range_km", 0))
         cruise_speed_kmh = float(row.get("Cruise_Speed_knots", 0)) * 1.852
-        fuel_capacity_l = float(row.get("Fuel_Capacity_L", 0))
-        fuel_rate_lph = float(row.get("Fuel_Consumption_Rate_kg_hr", 0))
+        fuel_capacity_liters = float(row.get("Fuel_Capacity_L", 0))
+        fuel_consumption_rate_kg_hr = float(row.get("Fuel_Consumption_Rate_kg_hr", 0))
         ceiling_m = float(row.get("Cruising_Altitude_ft", 0)) * 0.3048
 
         # collect any additional columns into a dict
@@ -198,8 +202,8 @@ class AircraftAPI:
             mtow_kg=mtow_kg,
             max_range_km=max_range_km,
             cruise_speed_kmh=cruise_speed_kmh,
-            fuel_capacity_liters=fuel_capacity_l,
-            fuel_consumption_lph=fuel_rate_lph,
+            fuel_capacity_liters=fuel_capacity_liters,
+            fuel_consumption_rate_kg_hr=fuel_consumption_rate_kg_hr,
             ceiling_m=ceiling_m,
             additional_specs=additional_specs or None,
         )
@@ -216,7 +220,7 @@ class AircraftAPI:
                 max_range_km=6100,
                 cruise_speed_kmh=840,
                 fuel_capacity_liters=24210,
-                fuel_consumption_lph=2500,
+                fuel_consumption_rate_kg_hr=2500,
                 ceiling_m=12000,
             ),
             Aircraft(
@@ -226,7 +230,7 @@ class AircraftAPI:
                 max_range_km=5765,
                 cruise_speed_kmh=842,
                 fuel_capacity_liters=26020,
-                fuel_consumption_lph=2600,
+                fuel_consumption_rate_kg_hr=2600,
                 ceiling_m=12500,
             ),
             Aircraft(
@@ -236,7 +240,7 @@ class AircraftAPI:
                 max_range_km=1700,
                 cruise_speed_kmh=511,
                 fuel_capacity_liters=5000,
-                fuel_consumption_lph=800,
+                fuel_consumption_rate_kg_hr=800,
                 ceiling_m=7600,
             ),
         ]

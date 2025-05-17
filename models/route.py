@@ -119,7 +119,7 @@ class Route:
         # Step 3: Fuel Consumption Calculation (use provided aircraft or defaults)
         if aircraft:
             fuel_consumption_rate = aircraft.fuel_consumption_rate_kg_hr
-            fuel_capacity_kg = aircraft.fuel_capacity_l * 0.8  # 0.8 kg/L for jet fuel
+            fuel_capacity_kg = aircraft.fuel_capacity_liters * 0.8  # 0.8 kg/L for jet fuel
         else:
             # Default values
             fuel_consumption_rate = 3000  # kg/hr

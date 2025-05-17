@@ -1,54 +1,91 @@
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
-from uuid import uuid4, UUID
-from datetime import datetime
+# models/waypoint.py
+import math
 from enum import Enum
+from typing import Dict, Any
+from uuid import UUID, uuid4
 
 
-class WaypointStatus(str, Enum):
+class WaypointStatus(Enum):
+    """Status of a waypoint in a route."""
+
     PENDING = "pending"
     ACTIVE = "active"
-    PASSED = "passed"
+    COMPLETED = "completed"
     BLOCKED = "blocked"
-    SKIPPED = "skipped"
 
 
-class Waypoint(BaseModel):
-    """Waypoint data model."""
+class Waypoint:
+    """A waypoint on a flight route."""
 
-    id: UUID = Field(default_factory=uuid4)
-    sequence: int
-    latitude: float
-    longitude: float
-    altitude: Optional[float] = None
-    weather_data: Optional[Dict[str, Any]] = None
-    status: WaypointStatus = WaypointStatus.PENDING
-    estimated_arrival: Optional[datetime] = None
+    def __init__(
+        self,
+        id: UUID = None,
+        name: str = "",
+        latitude: float = 0.0,
+        longitude: float = 0.0,
+        order: int = 0,
+        status: WaypointStatus = WaypointStatus.PENDING,
+    ):
+        self.id = id or uuid4()
+        self.name = name
+        self.latitude = latitude
+        self.longitude = longitude
+        self.order = order
+        self.status = status
 
-    def to_dict(self):
+    def calculate_distance(self, other) -> float:
+        """Calculate great-circle distance between this waypoint and another point in kilometers."""
+        # Earth radius in kilometers
+        R = 6371.0
+
+        # Convert latitude and longitude from degrees to radians
+        lat1 = math.radians(self.latitude)
+        lon1 = math.radians(self.longitude)
+        lat2 = math.radians(other.latitude)
+        lon2 = math.radians(other.longitude)
+
+        # Haversine formula
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
+        a = (
+            math.sin(dlat / 2) ** 2
+            + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+        )
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        distance = R * c
+
+        return distance
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert waypoint to dictionary representation."""
         return {
             "id": str(self.id),
-            "sequence": self.sequence,
-            "coordinates": [self.latitude, self.longitude],
-            "altitude": self.altitude,
-            "weather_data": self.weather_data,
-            "status": self.status,
-            "estimated_arrival": (
-                self.estimated_arrival.isoformat() if self.estimated_arrival else None
+            "name": self.name,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "order": self.order,
+            "status": (
+                self.status.value
+                if isinstance(self.status, WaypointStatus)
+                else self.status
             ),
         }
 
-    def mark_as_blocked(self):
-        """Mark this waypoint as blocked."""
-        self.status = WaypointStatus.BLOCKED
-        return self
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Waypoint":
+        """Create a Waypoint object from dictionary data."""
+        status = data.get("status", "pending")
+        if isinstance(status, str):
+            try:
+                status = WaypointStatus(status)
+            except ValueError:
+                status = WaypointStatus.PENDING
 
-    def mark_as_active(self):
-        """Mark this waypoint as active (current position)."""
-        self.status = WaypointStatus.ACTIVE
-        return self
-
-    def mark_as_passed(self):
-        """Mark this waypoint as passed."""
-        self.status = WaypointStatus.PASSED
-        return self
+        return cls(
+            id=UUID(data["id"]) if "id" in data else None,
+            name=data.get("name", ""),
+            latitude=data.get("latitude", 0.0),
+            longitude=data.get("longitude", 0.0),
+            order=data.get("order", 0),
+            status=status,
+        )
