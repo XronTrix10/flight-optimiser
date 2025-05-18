@@ -11,8 +11,6 @@ from services.weather_service import WeatherService
 from api.airport_api import AirportAPI
 from api.aircraft_api import AircraftAPI
 
-# Add these route handler imports
-from services.optimization.ppo_rerouter import PPORerouter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
