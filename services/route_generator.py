@@ -144,7 +144,9 @@ class RouteGenerator:
         bearing = origin.calculate_bearing(destination)
 
         # Number of waypoints scales with distance
-        num_waypoints = max(3, min(25, int(direct_distance / 200)))
+        # FIXME: temporarily disabled
+        # num_waypoints = max(3, min(25, int(direct_distance / 200)))
+        num_waypoints = 20
         waypoints = []
 
         # Calculate deflection angle based on route type
