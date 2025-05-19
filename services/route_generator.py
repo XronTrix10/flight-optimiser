@@ -1,6 +1,8 @@
 # services/route_generator.py
 import logging
 import random
+import os
+import json
 from typing import List, Dict, Any, Optional
 from uuid import uuid4
 
@@ -21,6 +23,13 @@ class RouteGenerator:
         self.weather_service = weather_service
         self.path_calculator = PathCalculator()
         self.aircraft_api = AircraftAPI()
+        self.cache_dir = "cache/routes"
+        self.ensure_cache_dir()
+
+    def ensure_cache_dir(self):
+        """Ensure route cache directory exists."""
+        if not os.path.exists(self.cache_dir):
+            os.makedirs(self.cache_dir)
 
     async def generate_alternative_routes(
         self,
@@ -29,6 +38,7 @@ class RouteGenerator:
         route_types: Optional[List[str]] = None,
         aircraft_model: Optional[str] = None,
         excluded_areas: Optional[List[Dict[str, Any]]] = None,
+        use_cache: bool = True,
     ) -> List[Route]:
         """
         Generate multiple alternative routes between two airports.
@@ -39,6 +49,7 @@ class RouteGenerator:
             route_types: List of route types to generate (default: all types)
             aircraft_model: Optional aircraft model to use
             excluded_areas: List of areas to avoid
+            use_cache: Whether to use cached routes (default: True)
 
         Returns:
             List of Route objects
@@ -51,6 +62,44 @@ class RouteGenerator:
         if not route_types:
             route_types = ["direct", "left", "right", "north", "south", "wide"]
 
+        # Create a cache key based on origin, destination, and route types
+        cache_key = f"{origin.iata_code}_{destination.iata_code}_{'-'.join(sorted(route_types))}"
+        
+        # Add aircraft model to cache key if specified
+        if aircraft_model:
+            cache_key += f"_{aircraft_model}"
+            
+        # Add excluded areas to cache key if specified
+        if excluded_areas:
+            # Create a simplified representation of excluded areas for the cache key
+            excluded_str = "_excluded"
+            for area in excluded_areas:
+                if "center" in area and "radius_km" in area:
+                    center = area["center"]
+                    excluded_str += f"_{center['latitude']:.2f}_{center['longitude']:.2f}_{area['radius_km']}"
+            cache_key += excluded_str
+
+        cache_file = os.path.join(self.cache_dir, f"{cache_key}.json")
+        
+        # Try to load from cache if use_cache is True
+        if use_cache and os.path.exists(cache_file):
+            try:
+                logger.info(f"Loading routes from cache for {origin.iata_code} to {destination.iata_code}")
+                with open(cache_file, "r") as f:
+                    cached_data = json.load(f)
+                
+                # Convert JSON data back to Route objects
+                routes = []
+                for route_data in cached_data:
+                    route = Route.from_dict(route_data)
+                    routes.append(route)
+                
+                logger.info(f"Loaded {len(routes)} routes from cache")
+                return routes
+            except Exception as e:
+                logger.warning(f"Error loading routes from cache: {str(e)}", exc_info=True)
+                # Continue with generating new routes if cache loading fails
+        
         logger.info(
             f"Generating {len(route_types)} alternative routes from {origin.iata_code} to {destination.iata_code}"
         )
@@ -72,6 +121,20 @@ class RouteGenerator:
             )
             if route:
                 routes.append(route)
+        
+        # Cache the generated routes
+        if routes:
+            try:
+                # Convert route objects to dictionaries
+                routes_data = [route.to_dict() for route in routes]
+                
+                # Save to cache file
+                with open(cache_file, "w") as f:
+                    json.dump(routes_data, f, indent=2)
+                    
+                logger.info(f"Cached {len(routes)} routes to {cache_file}")
+            except Exception as e:
+                logger.warning(f"Error caching routes: {str(e)}", exc_info=True)
 
         return routes
 
@@ -119,6 +182,48 @@ class RouteGenerator:
         )
 
         return route
+
+    def clear_cache(self, origin_code: Optional[str] = None, destination_code: Optional[str] = None):
+        """
+        Clear route cache for specific origin/destination or all routes.
+        
+        Args:
+            origin_code: Optional origin airport code to clear specific cache
+            destination_code: Optional destination airport code to clear specific cache
+        """
+        try:
+            # If both origin and destination specified, clear only that specific cache
+            if origin_code and destination_code:
+                pattern = f"{origin_code}_{destination_code}_"
+                for filename in os.listdir(self.cache_dir):
+                    if filename.startswith(pattern) and filename.endswith(".json"):
+                        os.remove(os.path.join(self.cache_dir, filename))
+                        logger.info(f"Cleared cache for {origin_code} to {destination_code}: {filename}")
+            
+            # If only origin specified, clear all caches from that origin
+            elif origin_code:
+                pattern = f"{origin_code}_"
+                for filename in os.listdir(self.cache_dir):
+                    if filename.startswith(pattern) and filename.endswith(".json"):
+                        os.remove(os.path.join(self.cache_dir, filename))
+                        logger.info(f"Cleared cache for routes from {origin_code}: {filename}")
+            
+            # If only destination specified, clear all caches to that destination
+            elif destination_code:
+                for filename in os.listdir(self.cache_dir):
+                    if f"_{destination_code}_" in filename and filename.endswith(".json"):
+                        os.remove(os.path.join(self.cache_dir, filename))
+                        logger.info(f"Cleared cache for routes to {destination_code}: {filename}")
+            
+            # If neither specified, clear all caches
+            else:
+                for filename in os.listdir(self.cache_dir):
+                    if filename.endswith(".json"):
+                        os.remove(os.path.join(self.cache_dir, filename))
+                logger.info("Cleared all route caches")
+                
+        except Exception as e:
+            logger.error(f"Error clearing route cache: {str(e)}", exc_info=True)
 
     def _calculate_waypoints(
         self,

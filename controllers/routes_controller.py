@@ -24,6 +24,7 @@ class RouteRequest(BaseModel):
     route_types: Optional[List[str]] = None
     optimization_method: Optional[str] = None
     excluded_areas: Optional[List[Dict[str, Any]]] = None
+    use_cache: bool = True
 
 
 class BlockWaypointRequest(BaseModel):
@@ -96,6 +97,7 @@ async def generate_routes(route_request: RouteRequest):
             route_types=route_request.route_types,
             aircraft_model=route_request.aircraft_model,
             excluded_areas=route_request.excluded_areas,
+            use_cache=route_request.use_cache
         )
 
         # Optimize routes
