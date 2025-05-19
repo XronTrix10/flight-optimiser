@@ -42,6 +42,7 @@ class RerouteRequest(BaseModel):
     blocked_waypoint: Dict[str, Any]
     current_position: Dict[str, Any]
     alternative_routes: Optional[List[Dict[str, Any]]] = None
+    aircraft_model: Optional[str] = None
 
 # Create shared services
 airport_api = AirportAPI()
@@ -237,12 +238,22 @@ async def reroute_flight(reroute_request: RerouteRequest):
                     "radius_km": 100
                 }]
             )
+
+        # Get aircraft if specified
+        aircraft = None
+        if reroute_request.aircraft_model:
+            aircraft = await aircraft_api.get_aircraft(reroute_request.aircraft_model)
+            if not aircraft:
+                # If no aircraft found, use the first Jet in the list
+                aircraft = await aircraft_api.get_aircraft("Jet")[0]
+            else:
+                aircraft = aircraft[0]  # Return only the first aircraft found
         
         # Get PPO rerouter
-        ppo_rerouter = optimizer_factory.get_rerouter()
+        ppo_rerouter = optimizer_factory.get_rerouter(aircraft)
         
         # Perform rerouting
-        rerouted_route = ppo_rerouter.reroute(
+        rerouted_route = await ppo_rerouter.reroute(
             blocked_waypoint=blocked_waypoint,
             current_route=current_route,
             alternative_routes=alternative_routes,

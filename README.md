@@ -392,6 +392,7 @@ Dynamically reroutes a flight when encountering a blocked waypoint using PPO.
     "longitude": 74.8000,
     "order": 3
   },
+  "aircraft_model": "Jet",
   "current_position": {
     "latitude": 26.5000,
     "longitude": 75.5000
@@ -512,6 +513,7 @@ const response = await fetch('/api/routes/reroute', {
   },
   body: JSON.stringify({
     current_route: currentRoute,
+    aircraft_model: 'Jet',
     blocked_waypoint: blockedWaypoint,
     current_position: aircraftPosition,
     alternative_routes: alternativeRoutes

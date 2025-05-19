@@ -2,6 +2,7 @@
 import logging
 from typing import Optional
 
+from models.aircraft import Aircraft
 from services.weather_service import WeatherService
 from services.optimization.aco_optimizer import ACOOptimizer
 from services.optimization.genetic_optimizer import GeneticOptimizer
@@ -31,6 +32,10 @@ class OptimizerFactory:
             logger.warning(f"Unknown optimization method: {method}. Using ACO as default.")
             return ACOOptimizer()
             
-    def get_rerouter(self) -> PPORerouter:
+    def get_rerouter(self, aircraft: Aircraft=None) -> PPORerouter:
         """Get a PPO rerouter instance."""
-        return PPORerouter()
+
+        ppo_router = PPORerouter(self.weather_service, aircraft)
+        ppo_router.consider_fuel = True
+
+        return ppo_router

@@ -1,13 +1,14 @@
 # services/optimization/ppo_rerouter.py
 import logging
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional
 from uuid import uuid4
 from geopy.distance import geodesic
 import copy
 
 from models.route import Route
+from models.aircraft import Aircraft
 from models.waypoint import Waypoint, WaypointStatus
-from models.airport import Airport
+from services.weather_service import WeatherService
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +16,116 @@ logger = logging.getLogger(__name__)
 class PPORerouter:
     """PPO-based rerouting logic for flight paths."""
 
-    def __init__(self):
+    def __init__(
+        self, weather_service: WeatherService = None, aircraft: Aircraft = None
+    ):
         self.used_route_types = []
+        self.weather_service = weather_service
+        self.aircraft = aircraft
+        self.consider_fuel = True
 
-    def reroute(
+    # Add method to evaluate alternatives based on fuel and weather
+    async def evaluate_alternatives(
+        self, current_route, blocked_waypoint, current_position, alternative_routes
+    ):
+        """Evaluate alternative routes based on multiple factors including weather and fuel."""
+        scores = []
+
+        for alt_route in alternative_routes:
+            # Skip routes with previously used path types
+            if alt_route.path_type in self.used_route_types:
+                continue
+
+            # Find closest waypoint in this alternative route
+            nearest_wp = None
+            nearest_index = -1
+            min_distance = float("inf")
+
+            for i, wp in enumerate(alt_route.waypoints):
+                distance = current_position.calculate_distance(wp)
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest_wp = wp
+                    nearest_index = i
+
+            if not nearest_wp:
+                continue
+
+            # Create a potential rerouted path
+            rerouted = self._create_rerouted_path(
+                current_route=current_route,
+                blocked_waypoint=blocked_waypoint,
+                current_position=current_position,
+                alternative_route=alt_route,
+                target_waypoint=nearest_wp,
+                target_index=nearest_index,
+            )
+
+            # Get weather data if needed and not already present
+            if self.consider_fuel and self.weather_service and self.aircraft:
+                if not hasattr(rerouted, "weather_data") or not rerouted.weather_data:
+                    rerouted.weather_data = (
+                        await self.weather_service.get_weather_for_route(rerouted)
+                    )
+
+                # Calculate fuel consumption with weather factors
+                fuel_kg = rerouted.calculate_fuel_consumption(
+                    self.aircraft, rerouted.weather_data
+                )
+            else:
+                fuel_kg = 0
+
+            # Base score is fitness score
+            base_score = rerouted.fitness_score
+
+            # Weather risk factors (optional enhancement)
+            weather_risk = 0
+            if self.consider_fuel and rerouted.weather_data:
+                for wp_key, weather in rerouted.weather_data.items():
+                    # Check for severe turbulence (using vertical velocity as proxy)
+                    v_velocity = abs(weather.get("vertical_velocity_250hPa", 0))
+                    if v_velocity > 0.5:  # m/s vertical velocity
+                        weather_risk += v_velocity * 2
+
+                    # Check for poor visibility
+                    visibility = weather.get("visibility", 10000)
+                    if visibility < 5000:  # meters
+                        weather_risk += (5000 - visibility) / 1000
+
+                    # Check for high cloud cover
+                    cloud_cover = weather.get("cloud_cover", 0)
+                    if cloud_cover > 80:  # percent
+                        weather_risk += (cloud_cover - 80) / 5
+
+            # Combined score (lower is better)
+            # Weight fuel consumption and weather risk appropriately
+            fuel_factor = 0.2 if self.consider_fuel else 0
+            weather_factor = 0.1 if self.consider_fuel else 0
+
+            total_score = (
+                base_score + (fuel_kg * fuel_factor) + (weather_risk * weather_factor)
+            )
+
+            scores.append(
+                {
+                    "route": alt_route,
+                    "target_waypoint": nearest_wp,
+                    "target_index": nearest_index,
+                    "distance": min_distance,
+                    "score": total_score,
+                    "fuel_kg": fuel_kg,
+                    "weather_risk": weather_risk,
+                    "rerouted_path": rerouted,
+                }
+            )
+
+        # Sort by score (lower is better)
+        scores.sort(key=lambda x: x["score"])
+
+        return scores
+
+    # Update reroute method to use the evaluate_alternatives method
+    async def reroute(
         self,
         blocked_waypoint: Waypoint,
         current_route: Route,
@@ -26,7 +133,7 @@ class PPORerouter:
         current_position: Optional[Waypoint] = None,
     ) -> Optional[Route]:
         """
-        Reroute a flight path when a waypoint is blocked.
+        Reroute a flight path when a waypoint is blocked, considering fuel and weather.
 
         Args:
             blocked_waypoint: The waypoint that needs to be avoided
@@ -74,63 +181,89 @@ class PPORerouter:
                 logger.error(f"Blocked waypoint not found in current route")
                 return None
 
-        # Find the closest waypoint in alternative routes, excluding used route types
-        reroute_targets = []
+        # Evaluate alternative routes considering weather and fuel
+        if self.consider_fuel and self.weather_service and self.aircraft:
+            alternatives = await self.evaluate_alternatives(
+                current_route, blocked_waypoint, current_position, alternative_routes
+            )
 
-        for alt_route in alternative_routes:
-            # Skip routes with previously used path types
-            if alt_route.path_type in self.used_route_types:
-                continue
+            # No valid alternatives found
+            if not alternatives:
+                logger.warning("No valid alternative routes found for rerouting")
+                return None
 
-            # Find closest waypoint in this alternative route
-            nearest_wp = None
-            nearest_index = -1
-            min_distance = float("inf")
+            # Take the best alternative (lowest score)
+            best_reroute = alternatives[0]
 
-            for i, wp in enumerate(alt_route.waypoints):
-                distance = current_position.calculate_distance(wp)
-                if distance < min_distance:
-                    min_distance = distance
-                    nearest_wp = wp
-                    nearest_index = i
+            logger.info(
+                f"Selected reroute: {best_reroute['route'].path_type} with score {best_reroute['score']:.2f}, "
+                f"fuel: {best_reroute['fuel_kg']:.2f}kg, weather risk: {best_reroute['weather_risk']:.2f}"
+            )
 
-            if nearest_wp:
-                reroute_targets.append(
-                    {
-                        "route": alt_route,
-                        "target_waypoint": nearest_wp,
-                        "target_index": nearest_index,
-                        "distance": min_distance,
-                    }
-                )
+            # Add route type to used routes
+            self.used_route_types.append(best_reroute["route"].path_type)
 
-        # No valid reroute targets found
-        if not reroute_targets:
-            logger.warning("No valid alternative routes found for rerouting")
-            return None
+            return best_reroute["rerouted_path"]
 
-        # Sort targets by distance (closest first)
-        reroute_targets.sort(key=lambda x: x["distance"])
-        best_reroute = reroute_targets[0]
+        else:
+            # Use original non-fuel-aware rerouting logic
+            # Find the closest waypoint in alternative routes, excluding used route types
+            reroute_targets = []
 
-        logger.info(
-            f"Selected reroute target: {best_reroute['target_waypoint'].name} on route {best_reroute['route'].name} (distance: {best_reroute['distance']:.2f} km)"
-        )
+            for alt_route in alternative_routes:
+                # Skip routes with previously used path types
+                if alt_route.path_type in self.used_route_types:
+                    continue
 
-        # Create a new rerouted path
-        rerouted_route = self._create_rerouted_path(
-            current_route=current_route,
-            blocked_waypoint=blocked_waypoint,
-            current_position=current_position,
-            alternative_route=best_reroute["route"],
-            target_waypoint=best_reroute["target_waypoint"],
-            target_index=best_reroute["target_index"],
-        )
+                # Find closest waypoint in this alternative route
+                nearest_wp = None
+                nearest_index = -1
+                min_distance = float("inf")
 
-        # Add route type to used routes
-        self.used_route_types.append(best_reroute["route"].path_type)
+                for i, wp in enumerate(alt_route.waypoints):
+                    distance = current_position.calculate_distance(wp)
+                    if distance < min_distance:
+                        min_distance = distance
+                        nearest_wp = wp
+                        nearest_index = i
 
-        return rerouted_route
+                if nearest_wp:
+                    reroute_targets.append(
+                        {
+                            "route": alt_route,
+                            "target_waypoint": nearest_wp,
+                            "target_index": nearest_index,
+                            "distance": min_distance,
+                        }
+                    )
+
+            # No valid reroute targets found
+            if not reroute_targets:
+                logger.warning("No valid alternative routes found for rerouting")
+                return None
+
+            # Sort targets by distance (closest first)
+            reroute_targets.sort(key=lambda x: x["distance"])
+            best_reroute = reroute_targets[0]
+
+            logger.info(
+                f"Selected reroute target: {best_reroute['target_waypoint'].name} on route {best_reroute['route'].name} (distance: {best_reroute['distance']:.2f} km)"
+            )
+
+            # Create a new rerouted path
+            rerouted_route = self._create_rerouted_path(
+                current_route=current_route,
+                blocked_waypoint=blocked_waypoint,
+                current_position=current_position,
+                alternative_route=best_reroute["route"],
+                target_waypoint=best_reroute["target_waypoint"],
+                target_index=best_reroute["target_index"],
+            )
+
+            # Add route type to used routes
+            self.used_route_types.append(best_reroute["route"].path_type)
+
+            return rerouted_route
 
     def _create_rerouted_path(
         self,
@@ -263,9 +396,30 @@ class PPORerouter:
         else:
             rerouted_route.reroute_history = [reroute_record]
 
+        # Copy weather data if it exists in the source routes
+        if hasattr(current_route, "weather_data") and current_route.weather_data:
+            rerouted_route.weather_data = current_route.weather_data
+        elif (
+            hasattr(alternative_route, "weather_data")
+            and alternative_route.weather_data
+        ):
+            rerouted_route.weather_data = alternative_route.weather_data
+
         # Calculate distance and fitness
         rerouted_route.calculate_total_distance()
         rerouted_route.calculate_fitness_score()
+
+        # Calculate fuel consumption if we have aircraft and weather data
+        if (
+            self.aircraft
+            and hasattr(rerouted_route, "weather_data")
+            and rerouted_route.weather_data
+        ):
+            fuel_kg = rerouted_route.calculate_fuel_consumption(
+                self.aircraft, rerouted_route.weather_data
+            )
+            rerouted_route.fuel_consumption_kg = fuel_kg
+            logger.info(f"Calculated fuel consumption: {fuel_kg:.2f} kg")
 
         logger.info(
             f"Created rerouted path with {len(rerouted_route.waypoints)} waypoints"

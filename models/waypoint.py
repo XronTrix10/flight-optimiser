@@ -70,6 +70,29 @@ class Waypoint:
                 else self.status
             ),
         }
+    
+    def calculate_bearing(self, other) -> float:
+        """Calculate the bearing (direction) from this waypoint to another in degrees (0-360)."""
+        # Convert latitude and longitude from degrees to radians
+        lat1 = math.radians(self.latitude)
+        lon1 = math.radians(self.longitude)
+        lat2 = math.radians(other.latitude)
+        lon2 = math.radians(other.longitude)
+
+        # Formula for initial bearing
+        dlon = lon2 - lon1
+        y = math.sin(dlon) * math.cos(lat2)
+        x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+        initial_bearing = math.atan2(y, x)
+
+        # Convert from radians to degrees
+        initial_bearing = math.degrees(initial_bearing)
+        
+        # Normalize to 0-360 degrees
+        bearing = (initial_bearing + 360) % 360
+
+        return bearing
+
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Waypoint":
