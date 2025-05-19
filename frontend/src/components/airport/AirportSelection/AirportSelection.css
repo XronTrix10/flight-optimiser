@@ -1,0 +1,22 @@
+/* src/components/airport/AirportSelection/AirportSelection.css */
+.airport-selection-container {
+  padding: 16px;
+}
+
+.generate-routes-button {
+  margin-top: 16px;
+  height: 48px;
+}
+
+.MuiAutocomplete-option {
+  display: flex;
+  align-items: center;
+}
+
+.MuiAutocomplete-option:hover {
+  background-color: rgba(25, 118, 210, 0.08);
+}
+
+.MuiFormControl-root {
+  margin-bottom: 8px;
+}

@@ -1,0 +1,45 @@
+/* src/components/route/RouteDetails/RouteDetails.css */
+.route-details-container {
+  padding: 16px;
+}
+
+.route-info-paper {
+  padding: 16px;
+  height: 100%;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.stats-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.info-chip {
+  margin-bottom: 8px;
+}
+
+.waypoints-table-container {
+  margin-top: 16px;
+}
+
+.blocked-waypoint-row {
+  background-color: rgba(244, 67, 54, 0.1);
+}
+
+@media (max-width: 960px) {
+  .route-info-paper {
+    margin-bottom: 16px;
+  }
+}

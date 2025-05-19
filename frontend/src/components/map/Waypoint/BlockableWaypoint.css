@@ -1,0 +1,48 @@
+/* src/components/map/Waypoint/BlockableWaypoint.css */
+.waypoint-popup {
+  min-width: 150px;
+}
+
+.waypoint-popup h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.waypoint-popup p {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #555;
+}
+
+.block-button {
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  margin-top: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.3s;
+}
+
+.block-button:hover {
+  background-color: #d32f2f;
+}
+
+.waypoint-marker div {
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.4);
+}
+
+.blocked-waypoint-marker div {
+  box-shadow: 0 0 0 2px rgba(244, 67, 54, 0.4);
+}
+
+.passed-waypoint-marker div {
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.4);
+}
+
+.upcoming-waypoint-marker div {
+  box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.4);
+}

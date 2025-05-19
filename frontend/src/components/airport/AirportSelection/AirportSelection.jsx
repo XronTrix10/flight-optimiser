@@ -1,20 +1,22 @@
-import AirplanemodeActiveIcon from "@mui/icons-material/AirplanemodeActive";
-import FlightLandIcon from "@mui/icons-material/FlightLand";
-import FlightTakeoffIcon from "@mui/icons-material/FlightTakeoff";
+// src/components/airport/AirportSelection/AirportSelection.jsx
+import React, { useState, useEffect } from "react";
 import {
-  Autocomplete,
   Box,
-  Button,
-  CircularProgress,
-  FormControl,
-  Grid,
-  InputLabel,
-  MenuItem,
-  Select,
   TextField,
+  Button,
   Typography,
+  Autocomplete,
+  CircularProgress,
+  Grid,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
-import { useEffect, useState } from "react";
+import FlightTakeoffIcon from "@mui/icons-material/FlightTakeoff";
+import FlightLandIcon from "@mui/icons-material/FlightLand";
+import AirplanemodeActiveIcon from "@mui/icons-material/AirplanemodeActive";
+import "./AirportSelection.css";
 
 const AirportSelection = ({
   onSelectionComplete,
@@ -26,7 +28,11 @@ const AirportSelection = ({
   const [originAirport, setOriginAirport] = useState(null);
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [destinationAirport, setDestinationAirport] = useState(null);
-  const [aircraftModels, setAircraftModels] = useState([]);
+  const [aircraftModels, setAircraftModels] = useState([
+    { model: "Turboprop", manufacturer: "Unknown" },
+    { model: "Piston", manufacturer: "Unknown" },
+    { model: "Jet", manufacturer: "Unknown" },
+  ]);
   const [selectedAircraft, setSelectedAircraft] = useState("Jet");
   const [loadingOrigin, setLoadingOrigin] = useState(false);
   const [loadingDestinations, setLoadingDestinations] = useState(false);
@@ -34,12 +40,15 @@ const AirportSelection = ({
   // Fetch all airports on component mount
   useEffect(() => {
     const fetchAirports = async () => {
+      setLoadingOrigin(true);
       try {
         const response = await fetch("http://localhost:8000/api/airports");
         const data = await response.json();
         setAirports(data);
       } catch (error) {
         console.error("Error fetching airports:", error);
+      } finally {
+        setLoadingOrigin(false);
       }
     };
 
@@ -47,7 +56,10 @@ const AirportSelection = ({
       try {
         const response = await fetch("http://localhost:8000/api/aircraft");
         const data = await response.json();
-        setAircraftModels(data);
+        if (data && data.length > 0) {
+          const limitedData = data.slice(0, 30); // Get the first 30 objects
+          setAircraftModels(limitedData);
+        }
       } catch (error) {
         console.error("Error fetching aircraft models:", error);
       }
@@ -104,7 +116,7 @@ const AirportSelection = ({
   };
 
   return (
-    <Box sx={{ p: 1 }}>
+    <Box className="airport-selection-container">
       <Typography variant="h5" component="h2" gutterBottom>
         Flight Route Planning
       </Typography>
@@ -115,7 +127,9 @@ const AirportSelection = ({
             id="origin-airport"
             options={airports}
             getOptionLabel={(option) =>
-              `${option.iata_code} - ${option.name} (${option.city})`
+              `${option.iata_code} - ${option.name} (${
+                option.city || option.country
+              })`
             }
             loading={loadingOrigin}
             value={originAirport}
@@ -153,7 +167,9 @@ const AirportSelection = ({
             id="destination-airport"
             options={destinationOptions}
             getOptionLabel={(option) =>
-              `${option.iata_code} - ${option.name} (${option.city})`
+              `${option.iata_code} - ${option.name} (${
+                option.city || option.country
+              })`
             }
             loading={loadingDestinations}
             disabled={!originAirport}
@@ -199,7 +215,7 @@ const AirportSelection = ({
               startAdornment={<AirplanemodeActiveIcon sx={{ mr: 1 }} />}
             >
               {aircraftModels.map((aircraft, index) => (
-                <MenuItem key={`aircraft-${aircraft.model}-${index}`} value={aircraft.model}>
+                <MenuItem key={`${aircraft.model}-${index}`} value={aircraft.model}>
                   {aircraft.model} - {aircraft.manufacturer}
                 </MenuItem>
               ))}
@@ -215,7 +231,7 @@ const AirportSelection = ({
             size="large"
             disabled={!originAirport || !destinationAirport || loading}
             onClick={handleGenerateRoutes}
-            sx={{ mt: 1 }}
+            className="generate-routes-button"
           >
             {loading ? (
               <CircularProgress size={24} color="inherit" />

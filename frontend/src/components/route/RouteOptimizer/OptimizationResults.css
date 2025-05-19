@@ -1,0 +1,142 @@
+/* src/components/route/RouteOptimizer/OptimizationResults.css */
+.optimization-results {
+    margin-top: 24px;
+    padding: 16px;
+    border-radius: 4px;
+    background-color: #f8f9fa;
+    border: 1px solid #e0e0e0;
+}
+
+.results-title {
+    margin-bottom: 16px;
+    color: #1a237e;
+    font-weight: 500;
+}
+
+.optimization-method {
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: center;
+}
+
+.method-chip {
+    font-weight: 500;
+}
+
+.improvements-container {
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.improvement-metrics {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 12px;
+}
+
+.metric-item {
+    width: 100%;
+}
+
+.metric-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.metric-value {
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.improvement-progress {
+    height: 6px;
+    border-radius: 3px;
+}
+
+.improvement-positive {
+    display: flex;
+    align-items: center;
+    color: #2e7d32;
+    font-weight: 500;
+}
+
+.improvement-negative {
+    display: flex;
+    align-items: center;
+    color: #d32f2f;
+    font-weight: 500;
+}
+
+.no-change {
+    color: #757575;
+}
+
+.improvement-icon {
+    font-size: 16px !important;
+    margin-right: 2px;
+}
+
+.section-divider {
+    margin: 24px 0 16px 0;
+}
+
+.comparison-table-container {
+    margin-bottom: 16px;
+}
+
+.difference-cell {
+    color: #2e7d32;
+    font-weight: 500;
+}
+
+.positive-difference {
+    color: #2e7d32;
+    font-weight: 500;
+}
+
+.negative-difference {
+    color: #d32f2f;
+    font-weight: 500;
+}
+
+.waypoint-note {
+    margin-top: 8px;
+    font-style: italic;
+    color: #757575;
+}
+
+.no-optimization {
+    padding: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.success-icon {
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+@media (min-width: 600px) {
+    .improvement-metrics {
+        flex-direction: row;
+        justify-content: space-between;
+    }
+
+    .metric-item {
+        width: 30%;
+    }
+}
+
+@media (max-width: 600px) {
+    .optimization-results {
+        padding: 12px;
+    }
+
+    .improvements-container {
+        padding: 12px;
+    }
+}

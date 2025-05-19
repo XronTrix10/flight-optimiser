@@ -1,0 +1,107 @@
+/* src/components/route/RouteRerouting/RouteRerouting.css */
+
+.route-rerouting {
+    background-color: rgba(255, 248, 225, 0.9);
+    border: 1px solid #ffb74d;
+    border-radius: 4px;
+    padding: 16px;
+    margin: 16px 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.route-rerouting h4 {
+    color: #e65100;
+    margin-top: 0;
+    margin-bottom: 8px;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+}
+
+.route-rerouting p {
+    margin-bottom: 16px;
+    color: #424242;
+    font-size: 14px;
+}
+
+.reroute-button {
+    background-color: #ff9800;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 4px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.reroute-button:hover {
+    background-color: #f57c00;
+    transform: translateY(-1px);
+}
+
+.reroute-button:active {
+    transform: translateY(1px);
+}
+
+.reroute-button:disabled {
+    background-color: #bdbdbd;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.reroute-instructions {
+    font-size: 13px;
+    font-style: italic;
+    color: #757575;
+    margin-top: 12px;
+}
+
+.reroute-status {
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    margin-bottom: 12px;
+}
+
+.reroute-status.success {
+    color: #2e7d32;
+}
+
+.reroute-status.error {
+    color: #d32f2f;
+}
+
+/* Animation for the rerouting process */
+@keyframes pulse {
+    0% {
+        opacity: 0.7;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0.7;
+    }
+}
+
+.rerouting-in-progress {
+    animation: pulse 1.5s infinite;
+}
+
+/* Responsiveness */
+@media (max-width: 768px) {
+    .route-rerouting {
+        padding: 12px;
+    }
+
+    .reroute-button {
+        padding: 8px 12px;
+    }
+}

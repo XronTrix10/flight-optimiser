@@ -1,0 +1,17 @@
+/* src/components/common/LoadingIndicator/LoadingIndicator.css */
+.loading-indicator {
+  width: 100%;
+  padding: 12px;
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.09);
+}
+
+.loading-text {
+  margin-bottom: 8px;
+}
+
+.progress-bar {
+  height: 6px;
+  border-radius: 3px;
+}
