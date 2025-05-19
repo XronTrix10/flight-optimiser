@@ -1,4 +1,4 @@
-# Flight Optimization API – Reference Guide  
+# Flight Optimization API – Reference Guide
 
 ================================================
 
@@ -6,47 +6,55 @@
 
 ---
 
-Base URL (default dev server)  
+Base URL (default dev server)
+
 ```
 http://localhost:8000
 ```
 
-Health-check  
+Health-check
+
 ```
 GET /health          → 200 OK {"status":"healthy"}
 ```
 
 No authentication is required right now; every endpoint returns JSON unless noted.
 
---------------------------------------------------------------------
-1. Airports API  [controllers/airports_controller.py](file:///flight_optimization/controllers/airports_controller.py)
---------------------------------------------------------------------
+---
 
-| Verb | Path | Description |
-|------|------|-------------|
-| GET | /api/airports | List airports (optionally filter by country) |
-| GET | /api/airports/routes | Direct-flight adjacency list |
-| GET | /api/airports/{iata_code} | Airport detail by IATA code |
+1. Airports API [controllers/airports_controller.py](file:///flight_optimization/controllers/airports_controller.py)
 
-### 1.1  GET /api/airports  
+---
+
+| Verb | Path                      | Description                                  |
+| ---- | ------------------------- | -------------------------------------------- |
+| GET  | /api/airports             | List airports (optionally filter by country) |
+| GET  | /api/airports/routes      | Direct-flight adjacency list                 |
+| GET  | /api/airports/{iata_code} | Airport detail by IATA code                  |
+| GET | /api/airports/{iata_code}/destinations | List airports reachable by direct flight |
+
+### 1.1 GET /api/airports
+
 Query-string  ?country_code=IN (default “IN”).  
 Response `200 OK` – array of Airport objects.
 
 Airport schema
+
 ```jsonc
 {
   "iata_code": "BLR",
   "name": "Kempegowda International Airport",
   "city": "Bangalore",
   "country": "India",
-  "coordinates": [12.9500, 77.6680],
+  "coordinates": [12.95, 77.668],
   "elevation": 915,
   "timezone": "Asia/Kolkata",
   "direct_connections": ["DEL", "BOM", "..."]
 }
 ```
 
-### 1.2  GET /api/airports/routes  
+### 1.2 GET /api/airports/routes
+
 Returns a dictionary where each key is an origin IATA and the value is a list of IATA codes that can be reached by direct flight.
 
 ```json
@@ -56,19 +64,50 @@ Returns a dictionary where each key is an origin IATA and the value is a list of
 }
 ```
 
-### 1.3  GET /api/airports/{iata_code}  
+### 1.3 GET /api/airports/{iata_code}
+
 404 if airport not found.
 
---------------------------------------------------------------------
-2. Aircraft API  [controllers/aircraft_controller.py](file:///flight_optimization/controllers/aircraft_controller.py)
---------------------------------------------------------------------
+### 1.4 GET /api/airports/{iata_code}/destinations
 
-| Verb | Path | Description |
-|------|------|-------------|
-| GET | /api/aircraft | List all aircraft models |
-| GET | /api/aircraft/{model} | Get specs for one model |
+Returns a list of airports that can be reached by direct flight from the source airport.
+
+```json
+[
+  {
+    "id": "3f89390b-8dcb-43c8-b416-0af713658a4b",
+    "iata_code": "CCU",
+    "name": "Netaji Subhas Chandra Bose Airport",
+    "city": "CCU",
+    "country": "IN",
+    "latitude": 22.64531,
+    "longitude": 88.43931
+  },
+  {
+    "id": "6097d359-1d74-4a93-91f9-89bba38f04fe",
+    "iata_code": "BOM",
+    "name": "Chhatrapati Shivaji International Airport",
+    "city": "BOM",
+    "country": "IN",
+    "latitude": 19.095509,
+    "longitude": 72.87497
+  }..
+]
+```
+
+---
+
+2. Aircraft API [controllers/aircraft_controller.py](file:///flight_optimization/controllers/aircraft_controller.py)
+
+---
+
+| Verb | Path                  | Description              |
+| ---- | --------------------- | ------------------------ |
+| GET  | /api/aircraft         | List all aircraft models |
+| GET  | /api/aircraft/{model} | Get specs for one model  |
 
 Aircraft schema
+
 ```jsonc
 {
   "model": "A320",
@@ -83,33 +122,39 @@ Aircraft schema
 }
 ```
 
---------------------------------------------------------------------
+---
+
 3. Route Generation & Management  
    [controllers/routes_controller.py](file:///flight_optimization/controllers/routes_controller.py)
---------------------------------------------------------------------
 
-| Verb | Path | Description |
-|------|------|-------------|
-| POST | /api/routes/generate | Create alternative routes and return the optimized one |
-| GET  | /api/routes/{route_id} | Fetch a stored route *(not yet implemented, returns 404)* |
-| POST | /api/routes/block-waypoint | Mark a waypoint blocked & trigger real-time re-route |
+---
 
-### 3.1  POST /api/routes/generate  
+| Verb | Path                       | Description                                               |
+| ---- | -------------------------- | --------------------------------------------------------- |
+| POST | /api/routes/generate       | Create alternative routes and return the optimized one    |
+| GET  | /api/routes/{route_id}     | Fetch a stored route _(not yet implemented, returns 404)_ |
+| POST | /api/routes/block-waypoint | Mark a waypoint blocked & trigger real-time re-route      |
+
+### 3.1 POST /api/routes/generate
+
 Request body
+
 ```jsonc
 {
   "origin": "BLR",
   "destination": "DEL",
-  "aircraft_model": "A320",          // optional
-  "route_types": ["left","right"],   // optional – default six presets
-  "optimization_method": "aco",      // "aco" | "genetic" | null
-  "excluded_areas": [                // optional – circles to avoid
+  "aircraft_model": "A320", // optional
+  "route_types": ["left", "right"], // optional – default six presets
+  "optimization_method": "aco", // "aco" | "genetic" | null
+  "excluded_areas": [
+    // optional – circles to avoid
     { "center": [12.8, 77.6], "radius": 0.2 }
   ]
 }
 ```
 
 Response `200 OK`
+
 ```jsonc
 {
   "all_routes": [ { /* Route */ }, ... ],
@@ -118,20 +163,26 @@ Response `200 OK`
 ```
 
 Route schema (truncated)
+
 ```jsonc
 {
   "id": "9f4d7a08-6c2e-4e9d-9b47-fc8d2caa8e54",
   "name": "BLR to DEL (left)",
-  "origin": { /* Airport */ },
-  "destination": { /* Airport */ },
+  "origin": {
+    /* Airport */
+  },
+  "destination": {
+    /* Airport */
+  },
   "waypoints": [
     {
-      "id": "…",
-      "sequence": 1,
-      "coordinates": [13.01, 77.43],
-      "weather_data": { ... },
-      "status": "pending"
+      "id": "7b44e510-c482-4c05-a40a-256e7a132842",
+      "name": "WP1_direct",
+      "latitude": 27.0562,
+      "longitude": 76.2,
+      "order": 1
     }
+    // Additional waypoints...
   ],
   "route_type": "left",
   "distance_km": 1765.2,
@@ -146,7 +197,7 @@ Errors:
 • 404 if origin/destination not found  
 • 500 on unexpected failure
 
-### 3.2  POST /api/routes/block-waypoint  
+<!-- ### 3.2  POST /api/routes/block-waypoint
 Marks a waypoint as blocked during flight; the **RouteAdjuster** recalculates a new optimal path and pushes updates to all WebSocket subscribers.
 
 Request body
@@ -162,7 +213,7 @@ Response `200 OK`
 ```
 
 --------------------------------------------------------------------
-4. Optimization API  
+4. Optimization API
    [controllers/optimization_controller.py](file:///flight_optimization/controllers/optimization_controller.py)
 --------------------------------------------------------------------
 
@@ -171,8 +222,8 @@ Response `200 OK`
 | POST | /api/optimize/compare | Run both ACO & GA on the same set of routes |
 | POST | /api/optimize/optimize | (stub) optimize by IDs – returns 501 |
 
-### 4.1  POST /api/optimize/compare  
-Body – list of route objects (as returned by `/api/routes/generate`).  
+### 4.1  POST /api/optimize/compare
+Body – list of route objects (as returned by `/api/routes/generate`).
 Response
 ```jsonc
 {
@@ -180,21 +231,21 @@ Response
   "genetic_result":  { /* Route or null */ },
   "recommendation":  { /* Best route */ }
 }
-```
+``` -->
 
---------------------------------------------------------------------
-5. WebSocket for Real-time Updates  
+<!-- --------------------------------------------------------------------
+5. WebSocket for Real-time Updates
    [app.py](file:///flight_optimization/app.py)  + [realtime/websocket_manager.py](file:///flight_optimization/realtime/websocket_manager.py)
 --------------------------------------------------------------------
 
-Endpoint  
+Endpoint
 ```
 ws://localhost:8000/ws/route/{route_id}
 ```
 
 Upon connection the server keeps the socket open.
 
-Client → Server messages  
+Client → Server messages
 ```jsonc
 // Block a waypoint in real-time
 {
@@ -203,7 +254,7 @@ Client → Server messages
 }
 ```
 
-Server → Client push formats  
+Server → Client push formats
 ```jsonc
 // Route replaced
 {
@@ -219,50 +270,65 @@ Server → Client push formats
     "status": "passed"
   }
 }
-```
+``` -->
 
---------------------------------------------------------------------
+---
+
 6. Error Model
---------------------------------------------------------------------
+
+---
+
 Every controller ultimately raises `fastapi.HTTPException`.  
 Standard payload:
+
 ```json
 {
   "detail": "Human-readable message"
 }
 ```
+
 Status codes used: 400, 404, 500, 501.
 
---------------------------------------------------------------------
-7. Environment / Config reference  [utils/config.py](file:///flight_optimization/utils/config.py)
---------------------------------------------------------------------
+---
+
+7. Environment / Config reference [utils/config.py](file:///flight_optimization/utils/config.py)
+
+---
+
 Important variables (defaults in parentheses):
 
-- HOST (0.0.0.0)  PORT (8000)  DEBUG (False)  
-- TRAVELPAYOUTS_API_KEY  
-- REDIS_URL (for weather cache)  
-- WEATHER_CACHE_TTL (3600 s)  
-- DEFAULT_OPTIMIZATION_METHOD (aco)  
-- ACO_ITERATIONS (50)  GA_GENERATIONS (50)  POPULATION_SIZE (100)  
+- HOST (0.0.0.0) PORT (8000) DEBUG (False)
+- TRAVELPAYOUTS_API_KEY
+- REDIS_URL (for weather cache)
+- WEATHER_CACHE_TTL (3600 s)
+- DEFAULT_OPTIMIZATION_METHOD (aco)
+- ACO_ITERATIONS (50) GA_GENERATIONS (50) POPULATION_SIZE (100)
 - WEATHER_VS_DISTANCE_WEIGHT (0.7) etc.
 
---------------------------------------------------------------------
+---
+
 8. Running the service
---------------------------------------------------------------------
+
+---
+
 ```bash
 pip install -r requirements.txt
 cp .env.example .env  # edit as needed
 python main.py        # starts Uvicorn server
 ```
 
---------------------------------------------------------------------
+---
+
 9. Changelog
---------------------------------------------------------------------
+
+---
+
 • v1.0 (2025-05-13): first public API — airports, aircraft, route generation, optimization (ACO/GA), real-time re-routing via WebSocket.
 
---------------------------------------------------------------------
-Contact
---------------------------------------------------------------------
+---
+
+## Contact
+
 For questions / bugs open an issue or ping the backend team on Slack.
 
 ---
@@ -276,6 +342,7 @@ This documentation outlines how the APIs will work in our flight optimization ap
 ## Overview
 
 Our system now incorporates three powerful optimization algorithms:
+
 1. **Ant Colony Optimization (ACO)** - For initial route selection
 2. **Genetic Algorithm (GA)** - For alternative route generation and optimization
 3. **Proximal Policy Optimization (PPO)** - For dynamic rerouting when obstacles are encountered
@@ -289,6 +356,7 @@ Our system now incorporates three powerful optimization algorithms:
 Generates optimized flight routes between two airports.
 
 **Request Body:**
+
 ```json
 {
   "origin": "DEL",
@@ -298,7 +366,7 @@ Generates optimized flight routes between two airports.
   "optimization_method": "aco",
   "excluded_areas": [
     {
-      "center": {"latitude": 25.0, "longitude": 75.0},
+      "center": { "latitude": 25.0, "longitude": 75.0 },
       "radius_km": 100
     }
   ]
@@ -306,6 +374,7 @@ Generates optimized flight routes between two airports.
 ```
 
 **Response:**
+
 ```json
 {
   "routes": [
@@ -316,7 +385,7 @@ Generates optimized flight routes between two airports.
         "iata_code": "DEL",
         "name": "Indira Gandhi International Airport",
         "latitude": 28.5562,
-        "longitude": 77.1000
+        "longitude": 77.1
       },
       "destination": {
         "iata_code": "BOM",
@@ -329,9 +398,9 @@ Generates optimized flight routes between two airports.
           "id": "7b44e510-c482-4c05-a40a-256e7a132842",
           "name": "WP1_direct",
           "latitude": 27.0562,
-          "longitude": 76.2000,
+          "longitude": 76.2,
           "order": 1
-        },
+        }
         // Additional waypoints...
       ],
       "path_type": "direct",
@@ -339,7 +408,7 @@ Generates optimized flight routes between two airports.
       "distance_km": 1148.56,
       "fitness_score": 4.23,
       "created_at": "2025-05-17T10:30:45.123456"
-    },
+    }
     // Additional routes...
   ],
   "best_route": {
@@ -355,17 +424,19 @@ Generates optimized flight routes between two airports.
 Optimizes a set of routes using the specified method.
 
 **Request Body:**
+
 ```json
 {
   "routes": [
     // Array of route objects
   ],
-  "method": "aco",  // "aco", "genetic", or "ppo"
+  "method": "aco", // "aco", "genetic", or "ppo"
   "iterations": 50
 }
 ```
 
 **Response:**
+
 ```json
 {
   "optimized_route": {
@@ -384,6 +455,7 @@ Optimizes a set of routes using the specified method.
 Dynamically reroutes a flight when encountering a blocked waypoint using PPO.
 
 **Request Body:**
+
 ```json
 {
   "current_route": {
@@ -393,13 +465,13 @@ Dynamically reroutes a flight when encountering a blocked waypoint using PPO.
     "id": "7b44e510-c482-4c05-a40a-256e7a132842",
     "name": "WP3_direct",
     "latitude": 25.0562,
-    "longitude": 74.8000,
+    "longitude": 74.8,
     "order": 3
   },
   "aircraft_model": "Jet",
   "current_position": {
-    "latitude": 26.5000,
-    "longitude": 75.5000
+    "latitude": 26.5,
+    "longitude": 75.5
   },
   "alternative_routes": [
     // Array of alternative route objects
@@ -408,6 +480,7 @@ Dynamically reroutes a flight when encountering a blocked waypoint using PPO.
 ```
 
 **Response:**
+
 ```json
 {
   "rerouted_route": {
@@ -427,9 +500,7 @@ Dynamically reroutes a flight when encountering a blocked waypoint using PPO.
     "distance_km": 1195.32,
     "fitness_score": 4.56,
     "created_at": "2025-05-17T10:45:23.123456",
-    "reroute_history": [
-      ["WP3_direct", "north"]
-    ]
+    "reroute_history": [["WP3_direct", "north"]]
   },
   "reroute_details": {
     "original_route_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -439,6 +510,37 @@ Dynamically reroutes a flight when encountering a blocked waypoint using PPO.
     "distance_increase_km": 46.76
   }
 }
+```
+
+### 4. Get Available Destinations for a Source
+
+#### `POST /api/airports/:iata_code/destinations`
+
+Returns a list of airports that can be reached by direct flight from the source airport.
+
+**Response:**
+
+```json
+[
+  {
+    "id": "3f89390b-8dcb-43c8-b416-0af713658a4b",
+    "iata_code": "CCU",
+    "name": "Netaji Subhas Chandra Bose Airport",
+    "city": "CCU",
+    "country": "IN",
+    "latitude": 22.64531,
+    "longitude": 88.43931
+  },
+  {
+    "id": "6097d359-1d74-4a93-91f9-89bba38f04fe",
+    "iata_code": "BOM",
+    "name": "Chhatrapati Shivaji International Airport",
+    "city": "BOM",
+    "country": "IN",
+    "latitude": 19.095509,
+    "longitude": 72.87497
+  }..
+]
 ```
 
 ## Implementation Details
@@ -486,16 +588,16 @@ The route selection is based on a sophisticated fitness function that considers:
 
 ```javascript
 // Request optimal routes between Delhi and Mumbai
-const response = await fetch('/api/routes/generate', {
-  method: 'POST',
+const response = await fetch("/api/routes/generate", {
+  method: "POST",
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
   body: JSON.stringify({
-    origin: 'DEL',
-    destination: 'BOM',
-    aircraft_model: 'A320',
-    optimization_method: 'aco'
+    origin: "DEL",
+    destination: "BOM",
+    aircraft_model: "A320",
+    optimization_method: "aco",
   }),
 });
 
@@ -510,17 +612,17 @@ displayRouteOnMap(optimizedRoute);
 
 ```javascript
 // When a waypoint becomes blocked during flight
-const response = await fetch('/api/routes/reroute', {
-  method: 'POST',
+const response = await fetch("/api/routes/reroute", {
+  method: "POST",
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
   body: JSON.stringify({
     current_route: currentRoute,
-    aircraft_model: 'Jet',
+    aircraft_model: "Jet",
     blocked_waypoint: blockedWaypoint,
     current_position: aircraftPosition,
-    alternative_routes: alternativeRoutes
+    alternative_routes: alternativeRoutes,
   }),
 });
 

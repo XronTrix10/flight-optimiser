@@ -8,4 +8,6 @@ __pycache__/
 
 .DS_Store
 
-cache/weather/
+*/cache/weather/
+
+*/node_modules/
