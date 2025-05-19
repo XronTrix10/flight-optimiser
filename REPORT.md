@@ -53,6 +53,7 @@
 ──────────────────────────────────────────────────────────────────
 ### 2. CORE DATA-MODELS & GEO-MATH
 ──────────────────────────────────────────────────────────────────
+
 Airport, Waypoint and Route each expose Haversine-based helpers:
 
 Distance  
