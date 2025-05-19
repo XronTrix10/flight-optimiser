@@ -4,6 +4,8 @@
 
 ## See also [REPORT.md](https://github.com/XronTrix10/flight-optimiser/blob/main/REPORT.md) for technical details.
 
+---
+
 Base URL (default dev server)  
 ```
 http://localhost:8000

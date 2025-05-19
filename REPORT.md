@@ -41,7 +41,8 @@
                          Open-Meteo API (free)
 ```
 
-Key folders / files (click-through):
+#### Key folders / files (click-through):
+
 – [route.py](https://github.com/XronTrix10/flight-optimiser/blob/main/models/route.py) (fitness, fuel, risk)  
 – [waypoint.py](https://github.com/XronTrix10/flight-optimiser/blob/main/models/waypoint.py) (distance, bearing)  
 – [path_calculator.py](https://github.com/XronTrix10/flight-optimiser/blob/main/services/path_calculator.py) (great-circle + deflection)  
@@ -68,6 +69,7 @@ Both implemented in [waypoint.py](https://github.com/XronTrix10/flight-optimiser
 ──────────────────────────────────────────────────────────────────
 ### 3. WEATHER PIPELINE
 ──────────────────────────────────────────────────────────────────
+
 WeatherService hits the Open-Meteo “aviation bundle” once per node
 (origin, every waypointᵢ, destination) and file-caches by rounded
 lat/lon.  Key properties extracted:
@@ -81,6 +83,7 @@ All values arrive as plain floats in `route.weather_data[“waypoint_i”]`.
 ──────────────────────────────────────────────────────────────────
 ### 4. ROUTE FITNESS FUNCTION  (see [route.py](https://github.com/XronTrix10/flight-optimiser/blob/main/models/route.py))
 ──────────────────────────────────────────────────────────────────
+
 Overall score ↓ is better.  Constituents:
 
 a) Distance & Time  
@@ -114,6 +117,7 @@ All penalties are dimension-less and tuned so typical fitness ∈ [2,8].
 ──────────────────────────────────────────────────────────────────
 ### 5. ANT COLONY OPTIMISATION  ([aco_optimizer.py](https://github.com/XronTrix10/flight-optimiser/blob/main/services/optimization/aco_optimizer.py))
 ──────────────────────────────────────────────────────────────────
+
 • Pheromone table τ(route_id) initialised to 1.0  
 • For each iteration (≈10):  
  – For each ant (≈10) pick a route with probability  
@@ -196,6 +200,7 @@ Fuel m_fuel = t · ṁ (± wind factors)
 Fitness F = 0.6·S + 0.4·(m_fuel/10 000) + penalties  
 
 ──────────────────────────────────────────
+
 The system therefore fuses deterministic physics (great-circle,
 fuel burn) with stochastic search (ACO / GA) and reinforcement
 concepts (PPO-style scoring for live reroutes) while continuously
