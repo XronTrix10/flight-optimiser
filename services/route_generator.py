@@ -181,10 +181,21 @@ class RouteGenerator:
             deflection = 0
             variation = 30
 
-        # Create waypoints
-        for i in range(num_waypoints):
+        # FIRST WAYPOINT: Always use exact origin coordinates
+        first_waypoint = Waypoint(
+            id=uuid4(),
+            name=f"WP1_{route_type}",
+            latitude=origin.latitude,
+            longitude=origin.longitude,
+            order=1,
+        )
+        waypoints.append(first_waypoint)
+        
+        # Create intermediate waypoints
+        for i in range(1, num_waypoints - 1):  # Skip first and last waypoints
             # Calculate progress along direct path (0 to 1)
-            progress = (i + 1) / (num_waypoints + 1)
+            # Adjust progress to be between waypoint 1 and waypoint N
+            progress = i / (num_waypoints - 1)
 
             # For wide routes, alternate the deflection
             current_deflection = deflection
@@ -229,13 +240,23 @@ class RouteGenerator:
             # Create waypoint
             waypoint = Waypoint(
                 id=uuid4(),
-                name=f"WP{i+1}_{route_type}",
+                name=f"WP{i+1}_{route_type}",  # Waypoint numbering continues from 2
                 latitude=waypoint_coords[0],
                 longitude=waypoint_coords[1],
                 order=i + 1,
             )
 
             waypoints.append(waypoint)
+
+        # LAST WAYPOINT: Always use exact destination coordinates
+        last_waypoint = Waypoint(
+            id=uuid4(),
+            name=f"WP{num_waypoints}_{route_type}",
+            latitude=destination.latitude,
+            longitude=destination.longitude,
+            order=num_waypoints,
+        )
+        waypoints.append(last_waypoint)
 
         return waypoints
 
