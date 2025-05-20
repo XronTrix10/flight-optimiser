@@ -234,6 +234,7 @@ class RouteGenerator:
     ) -> List[Waypoint]:
         """
         Calculate waypoints between origin and destination based on route type.
+        Uses Bézier curves to create smooth, realistic flight paths.
 
         Args:
             origin: Origin airport
@@ -244,125 +245,157 @@ class RouteGenerator:
         Returns:
             List of Waypoint objects
         """
+        
         # Calculate direct distance and bearing
         direct_distance = origin.calculate_distance(destination)
         bearing = origin.calculate_bearing(destination)
 
-        # Number of waypoints scales with distance
-        # FIXME: temporarily disabled
-        # num_waypoints = max(3, min(25, int(direct_distance / 200)))
+        # Set number of waypoints
         num_waypoints = 20
         waypoints = []
-
-        # Calculate deflection angle based on route type
-        deflection = 0
-        variation = 0
-
+        
+        # For direct route, create a straight line
         if route_type == "direct":
-            deflection = 0
-            variation = 0
-        elif route_type == "left":
-            deflection = -20
-            variation = 5
+            # FIRST WAYPOINT: Always use exact origin coordinates
+            waypoints.append(Waypoint(
+                id=uuid4(),
+                name=f"WP1_{route_type}",
+                latitude=origin.latitude,
+                longitude=origin.longitude,
+                order=1,
+            ))
+            
+            # Create waypoints along the straight line
+            for i in range(1, num_waypoints - 1):
+                progress = i / (num_waypoints - 1)
+                # Calculate position along the straight line
+                waypoint_coords = self.path_calculator.calculate_position(
+                    origin.latitude,
+                    origin.longitude,
+                    destination.latitude,
+                    destination.longitude,
+                    progress,
+                    0,  # No deflection for direct route
+                )
+                
+                waypoints.append(Waypoint(
+                    id=uuid4(),
+                    name=f"WP{i+1}_{route_type}",
+                    latitude=waypoint_coords[0],
+                    longitude=waypoint_coords[1],
+                    order=i + 1,
+                ))
+            
+            # LAST WAYPOINT: Always use exact destination coordinates
+            waypoints.append(Waypoint(
+                id=uuid4(),
+                name=f"WP{num_waypoints}_{route_type}",
+                latitude=destination.latitude,
+                longitude=destination.longitude,
+                order=num_waypoints,
+            ))
+            
+            return waypoints
+        
+        # For other route types, use quadratic Bézier curves
+        # First, define the control points for the Bézier curve
+        start_coords = (origin.latitude, origin.longitude)
+        end_coords = (destination.latitude, destination.longitude)
+        
+        # Calculate middle control point based on route type
+        mid_lat = (start_coords[0] + end_coords[0]) / 2
+        mid_lon = (start_coords[1] + end_coords[1]) / 2
+        lat_diff = end_coords[0] - start_coords[0]
+        lon_diff = end_coords[1] - start_coords[1]
+        
+        # Offset magnitude should scale with distance to ensure consistent curve shapes
+        offset_magnitude = min(0.2, direct_distance / 2000)
+        
+        # Adjust control point based on route type
+        if route_type == "left":
+            mid_lat += lon_diff * offset_magnitude
+            mid_lon -= lat_diff * offset_magnitude
         elif route_type == "right":
-            deflection = 20
-            variation = 5
-        elif route_type == "north":
-            # Adjust bearing toward north
-            if 0 <= bearing < 180:
-                deflection = -bearing / 2
-            else:
-                deflection = (360 - bearing) / 2
-            variation = 10
-        elif route_type == "south":
-            # Adjust bearing toward south
-            if bearing > 180:
-                deflection = (180 - bearing) / 2
-            else:
-                deflection = (180 - bearing) / 2
-            variation = 10
+            mid_lat -= lon_diff * offset_magnitude
+            mid_lon += lat_diff * offset_magnitude
         elif route_type == "wide":
-            # Wide route alternates between left and right
-            deflection = 0
-            variation = 30
-
+            # Make a wider curve by moving control point further along the perpendicular
+            mid_lat += lon_diff * offset_magnitude * 1.5
+            mid_lon -= lat_diff * offset_magnitude * 1.5
+        elif route_type == "north":
+            # Move control point northward
+            north_offset = offset_magnitude * 2
+            mid_lat += north_offset
+        elif route_type == "south":
+            # Move control point southward
+            south_offset = offset_magnitude * 2
+            mid_lat -= south_offset
+        
+        # Check if control point is in excluded area and adjust if needed
+        if excluded_areas:
+            attempts = 0
+            while attempts < 5 and self._is_in_excluded_area(
+                (mid_lat, mid_lon), excluded_areas
+            ):
+                # Try to move the control point away from excluded area
+                # by increasing the offset
+                offset_magnitude *= 1.5
+                
+                if route_type == "left":
+                    mid_lat += lon_diff * offset_magnitude
+                    mid_lon -= lat_diff * offset_magnitude
+                elif route_type == "right":
+                    mid_lat -= lon_diff * offset_magnitude
+                    mid_lon += lat_diff * offset_magnitude
+                elif route_type == "wide":
+                    mid_lat += lon_diff * offset_magnitude * 1.5
+                    mid_lon -= lat_diff * offset_magnitude * 1.5
+                elif route_type == "north":
+                    mid_lat += offset_magnitude * 2
+                elif route_type == "south":
+                    mid_lat -= offset_magnitude * 2
+                    
+                attempts += 1
+        
+        # Generate waypoints using quadratic Bézier curve formula
+        # B(t) = (1-t)²P₀ + 2(1-t)tP₁ + t²P₂, where t ∈ [0,1]
+        
         # FIRST WAYPOINT: Always use exact origin coordinates
-        first_waypoint = Waypoint(
+        waypoints.append(Waypoint(
             id=uuid4(),
             name=f"WP1_{route_type}",
             latitude=origin.latitude,
             longitude=origin.longitude,
             order=1,
-        )
-        waypoints.append(first_waypoint)
+        ))
         
-        # Create intermediate waypoints
-        for i in range(1, num_waypoints - 1):  # Skip first and last waypoints
-            # Calculate progress along direct path (0 to 1)
-            # Adjust progress to be between waypoint 1 and waypoint N
-            progress = i / (num_waypoints - 1)
-
-            # For wide routes, alternate the deflection
-            current_deflection = deflection
-            if route_type == "wide":
-                current_deflection = 30 if i % 2 == 0 else -30
-
-            # Add noise to the deflection angle based on variation
-            if variation > 0:
-                noise = random.uniform(-variation, variation)
-                current_deflection += noise
-
-            # Calculate position with deflection
-            waypoint_coords = self.path_calculator.calculate_position(
-                origin.latitude,
-                origin.longitude,
-                destination.latitude,
-                destination.longitude,
-                progress,
-                current_deflection,
-            )
-
-            # Check if waypoint is in excluded area and adjust if needed
-            if excluded_areas:
-                attempts = 0
-                while attempts < 5 and self._is_in_excluded_area(
-                    waypoint_coords, excluded_areas
-                ):
-                    # Increase deflection to move away from excluded area
-                    additional_deflection = random.uniform(10, 30) * (
-                        1 if current_deflection >= 0 else -1
-                    )
-                    waypoint_coords = self.path_calculator.calculate_position(
-                        origin.latitude,
-                        origin.longitude,
-                        destination.latitude,
-                        destination.longitude,
-                        progress,
-                        current_deflection + additional_deflection,
-                    )
-                    attempts += 1
-
+        # Create intermediate waypoints using the Bézier curve
+        for i in range(1, num_waypoints - 1):
+            t = i / (num_waypoints - 1)  # Parameter t varies from 0 to 1
+            
+            # Quadratic Bézier curve formula
+            lat = (1 - t)**2 * start_coords[0] + 2 * (1 - t) * t * mid_lat + t**2 * end_coords[0]
+            lon = (1 - t)**2 * start_coords[1] + 2 * (1 - t) * t * mid_lon + t**2 * end_coords[1]
+            
             # Create waypoint
             waypoint = Waypoint(
                 id=uuid4(),
-                name=f"WP{i+1}_{route_type}",  # Waypoint numbering continues from 2
-                latitude=waypoint_coords[0],
-                longitude=waypoint_coords[1],
+                name=f"WP{i+1}_{route_type}",
+                latitude=lat,
+                longitude=lon,
                 order=i + 1,
             )
-
             waypoints.append(waypoint)
-
+        
         # LAST WAYPOINT: Always use exact destination coordinates
-        last_waypoint = Waypoint(
+        waypoints.append(Waypoint(
             id=uuid4(),
             name=f"WP{num_waypoints}_{route_type}",
             latitude=destination.latitude,
             longitude=destination.longitude,
             order=num_waypoints,
-        )
-        waypoints.append(last_waypoint)
-
+        ))
+        
         return waypoints
 
     def _is_in_excluded_area(
