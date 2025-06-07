@@ -46,8 +46,8 @@ Airport schema
   "name": "Kempegowda International Airport",
   "city": "Bangalore",
   "country": "India",
-  "coordinates": [12.95, 77.668],
-  "elevation": 915,
+  "latitude": 12.95,
+  "longitude": 77.668,
   "timezone": "Asia/Kolkata",
   "direct_connections": ["DEL", "BOM", "..."]
 }
@@ -134,6 +134,7 @@ Aircraft schema
 | POST | /api/routes/generate   | Create alternative routes and return the optimized one            |
 | GET  | /api/routes/{route_id} | Fetch a stored route _(not yet implemented, returns 404)_         |
 | POST | /api/routes/reroute    | Dynamically reroute a flight when encountering a blocked waypoint |
+| GET  | /api/routes/ccu-routes | Generate and return optimized routes from CCU (Kolkata) to all available destinations |
 
 ### 3.1 POST /api/routes/generate
 
@@ -266,6 +267,36 @@ Dynamically reroutes a flight when encountering a blocked waypoint using PPO.
   }
 }
 ```
+
+### 3.2 GET /api/routes/ccu-routes
+
+Generate and return optimized routes from CCU (Kolkata) to all available destinations.
+
+Returns:
+
+```json
+{
+   "origin": {
+    "code": "CCU",
+    "name": "Netaji Subhas Chandra Bose Airport",
+    "city": "CCU",
+    "country": "IN"
+  },
+  "route_count": 27,
+  "routes": [
+    {
+      "destination": {
+        "code": "AMD",
+        "name": "Ahmedabad Airport",
+        "city": "AMD",
+        "country": "IN"
+      },
+      "route": {... Route object ...}
+    },
+    ... Other 26 routes ...
+  ]
+}
+
 
 - `Note:` reroute_history is an empty array for now.
 - `Note:` all_routes contains a route which is of type "direct". This route is a straight line between origin and destination. it is meant to be rendered as a straight line on the map for the user. Planes are not allowed to fly on a straight line.
