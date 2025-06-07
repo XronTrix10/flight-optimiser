@@ -273,12 +273,16 @@ class PPORerouter:
             if rerouted_route and not rerouted_route.estimated_time:
                 # Calculate estimated time with default values if necessary
                 if self.aircraft:
-                    rerouted_route.estimated_time = rerouted_route.calculate_estimated_time(self.aircraft)
+                    rerouted_route.estimated_time = (
+                        rerouted_route.calculate_estimated_time(self.aircraft)
+                    )
                 else:
                     # Use a default speed if no aircraft is available
                     default_speed = 900  # km/h
                     flight_hours = rerouted_route.distance / default_speed
-                    rerouted_route.estimated_time = flight_hours + 0.5  # Add takeoff/landing time
+                    rerouted_route.estimated_time = (
+                        flight_hours + 0.5
+                    )  # Add takeoff/landing time
 
             return rerouted_route
 
@@ -327,21 +331,22 @@ class PPORerouter:
             # Get waypoints from current route up to current position
             waypoints_initial = current_route.waypoints[: current_pos_index + 1]
 
-            # Calculate how many more waypoints we need from the alternative route
-            total_waypoints_needed = len(current_route.waypoints)
-            remaining_waypoints_needed = total_waypoints_needed - len(waypoints_initial)
-
             # For the alternative route, we need to find a good entry point
             # Let's use the target_index provided, or find the closest waypoint to the blocked one
             alt_start_index = target_index
 
             # Get waypoints from alternative route starting from our entry point
             waypoints_alt = alternative_route.waypoints[alt_start_index:]
-            if len(waypoints_alt) > remaining_waypoints_needed:
-                waypoints_alt = waypoints_alt[:remaining_waypoints_needed]
-            elif len(waypoints_alt) < remaining_waypoints_needed and waypoints_alt:
-                logger.warning(
-                    f"Alternative route has fewer waypoints than needed. Using what's available."
+
+            # FIX: Always ensure the destination waypoint is included
+            destination_waypoint = current_route.waypoints[-1]
+
+            # Check if the last waypoint from the alternative route matches the destination
+            if waypoints_alt and waypoints_alt[-1].name != destination_waypoint.name:
+                # If the last waypoint in alternative route is not the destination,
+                # add the destination waypoint explicitly
+                logger.info(
+                    "Adding destination waypoint to ensure route ends at destination airport"
                 )
         else:
             # We're already past the blocked waypoint or it's not in our route
@@ -384,6 +389,39 @@ class PPORerouter:
             wp_copy.name = f"WP{next_order + i}_{route_type}"
             wp_copy.order = next_order + i
             combined_waypoints.append(wp_copy)
+
+        # FIX: Always ensure the final waypoint is the destination
+        destination_waypoint = copy.deepcopy(current_route.waypoints[-1])
+
+        # Check if the last waypoint in our combined route is already the destination
+        is_destination_included = False
+        if (
+            combined_waypoints
+            and combined_waypoints[-1].latitude == destination_waypoint.latitude
+            and combined_waypoints[-1].longitude == destination_waypoint.longitude
+        ):
+            is_destination_included = True
+
+        # If destination is not already included, add it
+        if not is_destination_included:
+            destination_waypoint.id = uuid4()  # Generate new ID to prevent duplicates
+            destination_waypoint.order = len(combined_waypoints) + 1
+            # Extract route type from the last waypoint to maintain consistent naming
+            if combined_waypoints:
+                last_wp_name_parts = combined_waypoints[-1].name.split("_")
+                route_type = (
+                    last_wp_name_parts[-1] if len(last_wp_name_parts) > 1 else "alt"
+                )
+                destination_waypoint.name = (
+                    f"WP{destination_waypoint.order}_{route_type}"
+                )
+            else:
+                destination_waypoint.name = f"WP{destination_waypoint.order}_dest"
+
+            combined_waypoints.append(destination_waypoint)
+            logger.info(
+                "Added destination waypoint to ensure route ends at destination airport"
+            )
 
         logger.info(
             f"Combined route: {len(waypoints_initial)} initial + {len(waypoints_alt)} alternative = {len(combined_waypoints)} total waypoints"
