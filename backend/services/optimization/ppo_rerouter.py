@@ -33,7 +33,10 @@ class PPORerouter:
 
         for alt_route in alternative_routes:
             # Skip routes with previously used path types
-            if alt_route.path_type in self.used_route_types or alt_route.path_type == "direct":
+            if (
+                alt_route.path_type in self.used_route_types
+                or alt_route.path_type == "direct"
+            ):
                 continue
 
             # Find closest waypoint in this alternative route
@@ -212,7 +215,10 @@ class PPORerouter:
 
             for alt_route in alternative_routes:
                 # Skip routes with previously used path types
-                if alt_route.path_type in self.used_route_types or alt_route.path_type == "direct":
+                if (
+                    alt_route.path_type in self.used_route_types
+                    or alt_route.path_type == "direct"
+                ):
                     continue
 
                 # Find closest waypoint in this alternative route
@@ -262,6 +268,17 @@ class PPORerouter:
 
             # Add route type to used routes
             self.used_route_types.append(best_reroute["route"].path_type)
+
+            # At the end, before returning the route
+            if rerouted_route and not rerouted_route.estimated_time:
+                # Calculate estimated time with default values if necessary
+                if self.aircraft:
+                    rerouted_route.estimated_time = rerouted_route.calculate_estimated_time(self.aircraft)
+                else:
+                    # Use a default speed if no aircraft is available
+                    default_speed = 900  # km/h
+                    flight_hours = rerouted_route.distance / default_speed
+                    rerouted_route.estimated_time = flight_hours + 0.5  # Add takeoff/landing time
 
             return rerouted_route
 
@@ -409,6 +426,10 @@ class PPORerouter:
         rerouted_route.calculate_total_distance()
         rerouted_route.calculate_fitness_score()
 
+        # Preserve estimated_time from current_route if available
+        if hasattr(current_route, "estimated_time") and current_route.estimated_time:
+            rerouted_route.estimated_time = current_route.estimated_time
+
         # Calculate fuel consumption if we have aircraft and weather data
         if (
             self.aircraft
@@ -418,12 +439,21 @@ class PPORerouter:
             fuel_kg = rerouted_route.calculate_fuel_consumption(
                 self.aircraft, rerouted_route.weather_data
             )
-            rerouted_route.fuel_consumption_kg = fuel_kg
+            rerouted_route.fuel_consumption = fuel_kg
             logger.info(f"Calculated fuel consumption: {fuel_kg:.2f} kg")
 
             # Calculate flight time
             flight_time = rerouted_route.calculate_estimated_time(self.aircraft)
             rerouted_route.estimated_time = flight_time
+
+        # Even if we don't have aircraft or weather data, we should still calculate estimated time
+        # using a default aircraft speed if needed
+        elif not rerouted_route.estimated_time:
+            # Use a default aircraft speed if we don't have the actual aircraft
+            default_speed = 900  # km/h, typical jet cruise speed
+            flight_hours = rerouted_route.distance / default_speed
+            # Add time for takeoff and landing
+            rerouted_route.estimated_time = flight_hours + 0.5
 
         logger.info(
             f"Created rerouted path with {len(rerouted_route.waypoints)} waypoints"

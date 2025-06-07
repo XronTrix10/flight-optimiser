@@ -157,6 +157,7 @@ class Route:
 
         # Apply all factors
         total_fuel_kg = base_fuel_kg * wind_factor * altitude_factor * temperature_factor
+        self.fuel_consumption = total_fuel_kg
         return total_fuel_kg
 
     def calculate_total_distance(self) -> float:
@@ -423,7 +424,19 @@ class Route:
             optimization_method=data.get("optimization_method", ""),
             distance=data.get("distance_km", 0),
             fitness_score=data.get("fitness_score", 0),
+            fuel_consumption=data.get("fuel_consumption", 0),
         )
+
+        if "estimated_time" in data:
+            estimated_time_data = data["estimated_time"]
+            if isinstance(estimated_time_data, dict) and "hours" in estimated_time_data:
+                # If it's in the format {"hours": x, "minutes": y}
+                hours = estimated_time_data.get("hours", 0)
+                minutes = estimated_time_data.get("minutes", 0)
+                route.estimated_time = hours + (minutes / 60)
+            else:
+                # Otherwise, use it directly
+                route.estimated_time = float(estimated_time_data) if estimated_time_data else 0
 
         if "created_at" in data:
             try:

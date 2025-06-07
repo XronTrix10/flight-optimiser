@@ -330,6 +330,11 @@ async def reroute_flight(reroute_request: RerouteRequest):
             if len(last_reroute) >= 2:
                 alt_route_type = last_reroute[1]
 
+        if not rerouted_route.estimated_time and aircraft:
+            # Calculate flight time if it wasn't already done
+            flight_time = rerouted_route.calculate_estimated_time(aircraft)
+            rerouted_route.estimated_time = flight_time
+
         # Calculate distance increase
         distance_increase_km = rerouted_route.distance - current_route.distance
 
