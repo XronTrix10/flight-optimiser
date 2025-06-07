@@ -10,7 +10,7 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import "leaflet-rotatedmarker"; 
+import "leaflet-rotatedmarker";
 
 // Fix for default marker icons in React
 delete L.Icon.Default.prototype._getIconUrl;
@@ -49,57 +49,62 @@ function SetBoundsAndZoom({ source, destination }) {
 function PlaneMarker({ route, position, simulationActive }) {
   const map = useMap();
   const markerRef = useRef(null);
-  
+
   useEffect(() => {
     if (!route || !simulationActive || position === undefined) return;
-    
+
     // Get the current waypoint position
     const waypoints = route.waypoints;
-    
+
     // Get the integer and fractional parts of the position
     const currentIndex = Math.floor(position);
     const progress = position - currentIndex;
-    
+
     // If we're at the last waypoint, just use its position
     if (currentIndex >= waypoints.length - 1) {
       const lastWaypoint = waypoints[waypoints.length - 1];
       if (markerRef.current) {
-        markerRef.current.setLatLng([lastWaypoint.latitude, lastWaypoint.longitude]);
+        markerRef.current.setLatLng([
+          lastWaypoint.latitude,
+          lastWaypoint.longitude,
+        ]);
       }
       return;
     }
-    
+
     // Get current and next waypoints
     const currentWp = waypoints[currentIndex];
     const nextWp = waypoints[currentIndex + 1];
-    
+
     // Interpolate between waypoints
-    const lat = currentWp.latitude + (nextWp.latitude - currentWp.latitude) * progress;
-    const lng = currentWp.longitude + (nextWp.longitude - currentWp.longitude) * progress;
-    
+    const lat =
+      currentWp.latitude + (nextWp.latitude - currentWp.latitude) * progress;
+    const lng =
+      currentWp.longitude + (nextWp.longitude - currentWp.longitude) * progress;
+
     if (markerRef.current) {
       markerRef.current.setLatLng([lat, lng]);
-      
+
       // Calculate bearing for plane rotation
       const bearing = calculateBearing(
-        currentWp.latitude, 
+        currentWp.latitude,
         currentWp.longitude,
         nextWp.latitude,
         nextWp.longitude
       );
-      
+
       // This will work after we add the leaflet-rotatedmarker plugin
       markerRef.current.setRotationAngle(bearing);
     }
   }, [route, position, simulationActive, map]);
 
   if (!route || !simulationActive) return null;
-  
+
   // Start at the first waypoint
   const initialWaypoint = route.waypoints[0];
-  
+
   return (
-    <Marker 
+    <Marker
       position={[initialWaypoint.latitude, initialWaypoint.longitude]}
       icon={planeIcon}
       rotationAngle={0}
@@ -129,6 +134,58 @@ function calculateBearing(lat1, lon1, lat2, lon2) {
   return bearing;
 }
 
+// Add a new component to display CCU routes
+function CCURoutesDisplay({ ccuRoutes, ccuAirport }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (ccuRoutes?.length > 0 && ccuAirport) {
+      // Create bounds that include all destinations
+      const bounds = L.latLngBounds([
+        ccuAirport.latitude,
+        ccuAirport.longitude,
+      ]);
+
+      // Add all destination points to the bounds
+      ccuRoutes.forEach((route) => {
+        if (route.waypoints?.length > 0) {
+          const lastPoint = route.waypoints[route.waypoints.length - 1];
+          bounds.extend(lastPoint);
+        }
+      });
+
+      // Fit the map to show all routes
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  }, [map, ccuRoutes, ccuAirport]);
+
+  if (!ccuRoutes?.length || !ccuAirport) return null;
+
+  return (
+    <>
+      {/* Render the CCU airport marker */}
+      <Marker position={[ccuAirport.latitude, ccuAirport.longitude]}>
+        <Popup>
+          <strong>{ccuAirport.name}</strong>
+          <br />
+          Kolkata, India - Main Hub
+        </Popup>
+      </Marker>
+
+      {/* Render all route lines */}
+      {ccuRoutes.map((route, index) => (
+        <Polyline
+          key={`ccu-route-${index}`}
+          positions={route.waypoints}
+          color={`hsl(${(index * 15) % 360}, 70%, 50%)`} // Different color for each route
+          weight={2}
+          opacity={0.7}
+        />
+      ))}
+    </>
+  );
+}
+
 export default function FlightMap({
   sourceAirport,
   destinationAirport,
@@ -136,7 +193,29 @@ export default function FlightMap({
   simulationActive,
   simulationPosition,
   onWaypointClick,
+  ccuRoutes = [], // Add this prop
+  ccuAirport = null, // Add this prop
 }) {
+  // If no source/destination is selected but we have CCU routes, show those
+  if ((!sourceAirport || !destinationAirport) && ccuRoutes.length > 0) {
+    return (
+      <MapContainer
+        center={[22.6505, 88.4463]} // CCU coordinates
+        zoom={40}
+        style={{ height: "500px", width: "100%" }}
+        className="rounded-lg shadow-md"
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+
+        <CCURoutesDisplay ccuRoutes={ccuRoutes} ccuAirport={ccuAirport} />
+      </MapContainer>
+    );
+  }
+
+  // If no selections but also no CCU routes yet (still loading perhaps)
   if (!sourceAirport || !destinationAirport) {
     return (
       <div className="flex h-[500px] w-full items-center justify-center bg-gray-100 rounded-lg">
@@ -146,7 +225,6 @@ export default function FlightMap({
       </div>
     );
   }
-
   // Prepare direct route for display
   const directRoute = optimizedRoute
     ? optimizedRoute.waypoints.map((wp) => [wp.latitude, wp.longitude])

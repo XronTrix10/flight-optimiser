@@ -50,3 +50,9 @@ export const rerouteFlightPath = async (rerouteData) => {
   if (!response.ok) throw new Error("Failed to reroute flight path");
   return response.json();
 };
+
+export const fetchCCURoutes = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/routes/ccu-routes`);
+  if (!response.ok) throw new Error("Failed to fetch CCU routes");
+  return response.json();
+};

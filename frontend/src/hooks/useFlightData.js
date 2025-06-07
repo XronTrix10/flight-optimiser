@@ -6,6 +6,7 @@ import {
   fetchAirportDestinations,
   generateRoutes,
   rerouteFlightPath,
+  fetchCCURoutes,
 } from "../services/api";
 
 export function useFlightData() {
@@ -24,21 +25,43 @@ export function useFlightData() {
   const [simulationPosition, setSimulationPosition] = useState(0);
   const [isRerouting, setIsRerouting] = useState(false);
 
+  // Add new state for CCU routes
+  const [ccuRoutes, setCCURoutes] = useState([]);
+  const [loadingCCURoutes, setLoadingCCURoutes] = useState(true);
+
   // Load initial data
   useEffect(() => {
     const loadInitialData = async () => {
       try {
         setLoading(true);
-        const [airportsData, aircraftData] = await Promise.all([
+        const [airportsData, aircraftData, ccuRoutesData] = await Promise.all([
           fetchAirports(),
           fetchAircraft(),
+          fetchCCURoutes(),
         ]);
         setAirports(airportsData);
         setAircraft(aircraftData);
+        // Process CCU routes data
+        if (ccuRoutesData && ccuRoutesData.routes) {
+          // Transform routes for easier rendering
+          const routeLines = ccuRoutesData.routes.map((routeItem) => {
+            // Extract just what we need for visualization
+            return {
+              destination: routeItem.destination,
+              waypoints: routeItem.route.waypoints.map((wp) => [
+                wp.latitude,
+                wp.longitude,
+              ]),
+            };
+          });
+
+          setCCURoutes(routeLines);
+        }
       } catch (err) {
         setError(err.message);
       } finally {
         setLoading(false);
+        setLoadingCCURoutes(false);
       }
     };
 
@@ -173,5 +196,7 @@ export function useFlightData() {
     stopSimulation,
     blockWaypoint,
     generateFlightRoutes,
+    ccuRoutes,
+    loadingCCURoutes,
   };
 }

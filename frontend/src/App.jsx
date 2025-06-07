@@ -32,7 +32,13 @@ export default function App() {
     stopSimulation,
     blockWaypoint,
     generateFlightRoutes,
+    // New CCU routes
+    ccuRoutes,
+    // loadingCCURoutes,
   } = useFlightData();
+
+  // Find the CCU airport object from airports list
+  const ccuAirport = airports.find((airport) => airport.iata_code === "CCU");
 
   const handleBlockWaypoint = (waypointId) => {
     if (simulationActive) {
@@ -92,79 +98,78 @@ export default function App() {
         </div>
       )}
 
-      {!loading &&
-        !loadingDestinations &&
-        sourceAirport &&
-        destinationAirport &&
-        selectedAircraft && (
-          <>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              <div className="lg:col-span-2">
-                <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-semibold">Flight Route Map</h2>
+      {!loading && (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div className="lg:col-span-2">
+              <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-semibold">Flight Route Map</h2>
 
-                    {optimizedRoute && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={generateFlightRoutes}
-                        disabled={isRerouting}
-                      >
-                        <RefreshCw className="h-4 w-4 mr-1" />
-                        Regenerate Routes
-                      </Button>
-                    )}
-                  </div>
-
-                  <FlightMap
-                    sourceAirport={sourceAirport}
-                    destinationAirport={destinationAirport}
-                    optimizedRoute={optimizedRoute}
-                    simulationActive={simulationActive}
-                    simulationPosition={simulationPosition}
-                    onWaypointClick={handleBlockWaypoint}
-                  />
+                  {optimizedRoute && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={generateFlightRoutes}
+                      disabled={isRerouting}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                      Regenerate Routes
+                    </Button>
+                  )}
                 </div>
-              </div>
 
-              <div className="space-y-6">
-                {optimizedRoute && <RouteDetails route={optimizedRoute} />}
-
-                {optimizedRoute && (
-                  <FlightSimulation
-                    route={optimizedRoute}
-                    active={simulationActive}
-                    position={simulationPosition}
-                    setPosition={setSimulationPosition}
-                    onStart={startSimulation}
-                    onStop={stopSimulation}
-                    onBlockWaypoint={handleBlockWaypoint}
-                    isRerouting={isRerouting}
-                  />
-                )}
+                <FlightMap
+                  sourceAirport={sourceAirport}
+                  destinationAirport={destinationAirport}
+                  optimizedRoute={optimizedRoute}
+                  simulationActive={simulationActive}
+                  simulationPosition={simulationPosition}
+                  onWaypointClick={handleBlockWaypoint}
+                  ccuRoutes={ccuRoutes} // Pass CCU routes
+                  ccuAirport={ccuAirport} // Pass CCU airport
+                />
               </div>
             </div>
 
-            {optimizedRoute &&
-              optimizedRoute.reroute_history &&
-              optimizedRoute.reroute_history.length > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-8">
-                  <h3 className="text-lg font-medium text-amber-800 mb-2">
-                    Reroute History
-                  </h3>
-                  <ul className="space-y-1">
-                    {optimizedRoute.reroute_history.map((reroute, index) => (
-                      <li key={index} className="text-amber-700">
-                        Blocked waypoint <strong>{reroute[0]}</strong> and
-                        rerouted via <strong>{reroute[1]}</strong> path
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-          </>
-        )}
+            {/* Only show the right panel when there's an optimized route */}
+            {optimizedRoute && (
+              <div className="space-y-6">
+                <RouteDetails route={optimizedRoute} />
+
+                <FlightSimulation
+                  route={optimizedRoute}
+                  active={simulationActive}
+                  position={simulationPosition}
+                  setPosition={setSimulationPosition}
+                  onStart={startSimulation}
+                  onStop={stopSimulation}
+                  onBlockWaypoint={handleBlockWaypoint}
+                  isRerouting={isRerouting}
+                />
+              </div>
+            )}
+          </div>
+
+          {optimizedRoute &&
+            optimizedRoute.reroute_history &&
+            optimizedRoute.reroute_history.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-8">
+                <h3 className="text-lg font-medium text-amber-800 mb-2">
+                  Reroute History
+                </h3>
+                <ul className="space-y-1">
+                  {optimizedRoute.reroute_history.map((reroute, index) => (
+                    <li key={index} className="text-amber-700">
+                      Blocked waypoint <strong>{reroute[0]}</strong> and
+                      rerouted via <strong>{reroute[1]}</strong> path
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+        </>
+      )}
 
       {!loading &&
         !loadingDestinations &&
