@@ -157,6 +157,7 @@ class Route:
 
         # Apply all factors
         total_fuel_kg = base_fuel_kg * wind_factor * altitude_factor * temperature_factor
+        total_fuel_kg /= 2
         self.fuel_consumption = total_fuel_kg
         return total_fuel_kg
 

@@ -26,7 +26,7 @@ class WeatherService:
 
     async def get_weather_for_route(self, route: Route) -> Dict[str, Dict[str, Any]]:
         """
-        Get weather data for all points along a route.
+        Get weather data for all points along a route using parallel requests.
 
         Args:
             route: A Route object with waypoints
@@ -49,9 +49,8 @@ class WeatherService:
                 ("destination", route.destination.latitude, route.destination.longitude)
             )
 
-        # Get weather for each point
-        weather_data = {}
-        for point_key, lat, lon in all_points:
+        # Create tasks for fetching weather data (either from cache or API)
+        async def get_point_weather(point_key, lat, lon):
             # Check cache first
             cache_key = f"{lat:.4f}_{lon:.4f}"
             cache_file = os.path.join(self.cache_dir, f"weather_{cache_key}.json")
@@ -59,17 +58,16 @@ class WeatherService:
             if os.path.exists(cache_file):
                 try:
                     with open(cache_file, "r") as f:
-                        weather_data[point_key] = json.load(f)
+                        weather_data = json.load(f)
                         logger.debug(
                             f"Found cached weather for {point_key} at {lat:.4f}, {lon:.4f}"
                         )
-                        continue
+                        return point_key, weather_data
                 except Exception as e:
                     logger.warning(f"Failed to read cached weather: {str(e)}")
 
             # Fetch from API if not cached
             weather = await self._fetch_weather_data(lat, lon)
-            weather_data[point_key] = weather
 
             # Save to cache
             try:
@@ -78,8 +76,16 @@ class WeatherService:
             except Exception as e:
                 logger.warning(f"Failed to cache weather data: {str(e)}")
 
-            # Slight delay to respect API rate limits
-            await asyncio.sleep(0.1)
+            return point_key, weather
+
+        # Create and execute all tasks in parallel
+        tasks = [
+            get_point_weather(point_key, lat, lon) for point_key, lat, lon in all_points
+        ]
+        results = await asyncio.gather(*tasks)
+
+        # Convert results to dictionary
+        weather_data = {point_key: data for point_key, data in results}
 
         return weather_data
 
