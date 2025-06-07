@@ -1,6 +1,5 @@
 # models/route.py
 import math
-import os
 from uuid import UUID, uuid4
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -28,6 +27,8 @@ class Route:
         distance: float = 0,
         fitness_score: float = 0,
         created_at: datetime = None,
+        fuel_consumption: float = 0,  # Added
+        estimated_time: float = 0,    # Added
     ):
         self.id = id or uuid4()
         self.name = name
@@ -40,6 +41,8 @@ class Route:
         self.fitness_score = fitness_score
         self.created_at = created_at or datetime.utcnow()
         self.weather_data = {}  # Will be populated by weather service
+        self.fuel_consumption = fuel_consumption  # In kg
+        self.estimated_time = estimated_time      # In hours
 
     def get_current_waypoint(self, current_time: datetime = None) -> Optional[Waypoint]:
         """Return the current active waypoint based on time elapsed."""
@@ -51,48 +54,107 @@ class Route:
         ]
         return active_waypoints[0] if active_waypoints else None
 
+    def calculate_estimated_time(self, aircraft) -> float:
+        """Calculate estimated flight time in hours based on aircraft specifications and route distance."""
+        if (
+            not aircraft
+            or not hasattr(aircraft, "cruise_speed_kmh")
+            or not self.distance
+        ):
+            return None
+
+        # Basic time calculation based on distance and cruise speed
+        base_time_hours = self.distance / aircraft.cruise_speed_kmh
+
+        # Add time for takeoff and landing (typically ~30 minutes total)
+        total_time_hours = base_time_hours + 0.5
+
+        # If we have weather data, account for headwinds/tailwinds
+        if hasattr(self, "weather_data") and self.weather_data:
+            # Calculate average wind effect
+            wind_effect = 0
+            num_points = 0
+
+            for wp_key, weather in self.weather_data.items():
+                # Extract wind data - assuming we have wind_speed and wind_direction
+                if "wind_speed" in weather and "wind_direction" in weather:
+                    wind_speed = weather.get("wind_speed", 0)  # m/s
+                    wind_direction = weather.get("wind_direction", 0)  # degrees
+
+                    # Simplified calculation - positive means tailwind (helps), negative means headwind (slows)
+                    # This is a very simplified model and would need refinement for real applications
+                    if 0 <= abs(wind_direction - self.average_bearing) <= 90:
+                        wind_effect += wind_speed * 3.6  # convert to km/h
+                    else:
+                        wind_effect -= wind_speed * 3.6  # convert to km/h
+
+                    num_points += 1
+
+            # Apply wind effect to time calculation
+            if num_points > 0:
+                avg_wind_effect = wind_effect / num_points
+                effective_speed = aircraft.cruise_speed_kmh + avg_wind_effect
+                if effective_speed > 0:  # Prevent division by zero
+                    wind_adjusted_time = self.distance / effective_speed
+                    total_time_hours = (
+                        wind_adjusted_time + 0.5
+                    )  # Still add takeoff/landing time
+
+        self.estimated_time = total_time_hours
+        return total_time_hours
+
     def calculate_fuel_consumption(self, aircraft, weather_data):
         """Calculate estimated fuel consumption based on route and weather."""
         # Base consumption from distance
         distance_km = self.distance
         flight_hours = distance_km / aircraft.cruise_speed_kmh
         base_fuel_kg = flight_hours * aircraft.fuel_consumption_rate_kg_hr
-        
-        # Adjustment factors
+
+        # Adjustment factors - start with 100% (no adjustment)
         wind_factor = 1.0
         altitude_factor = 1.0
         temperature_factor = 1.0
-        
+
         # Calculate headwind/tailwind component for each segment
         for i, waypoint in enumerate(self.waypoints[:-1]):
             if i >= len(self.waypoints) - 1:
                 continue
-                
+
             # Get next waypoint
             next_waypoint = self.waypoints[i + 1]
-            
+
             # Calculate bearing between waypoints
             from math import radians, sin, cos, atan2, degrees
+
             bearing = waypoint.calculate_bearing(next_waypoint)
-            
+
             # Get wind data
             waypoint_key = f"waypoint_{i}"
             if waypoint_key in weather_data:
-                wind_speed = weather_data[waypoint_key].get('wind_speed_10m', 0)
-                wind_direction = weather_data[waypoint_key].get('wind_direction_10m', 0)
-                
+                wind_speed = weather_data[waypoint_key].get("wind_speed_10m", 0)
+                wind_direction = weather_data[waypoint_key].get("wind_direction_10m", 0)
+
                 # Calculate headwind/tailwind component
                 # Positive is headwind, negative is tailwind
                 wind_angle = abs((wind_direction - bearing + 180) % 360 - 180)
                 if wind_angle <= 90:
                     # Headwind component
                     headwind = wind_speed * cos(radians(wind_angle))
-                    wind_factor += 0.02 * headwind  # Increase fuel by 2% per m/s headwind
+                    # Increase fuel by 2% per m/s headwind, but apply per segment
+                    segment_wind_factor = 1.0 + (0.02 * headwind)
                 else:
                     # Tailwind component
                     tailwind = wind_speed * cos(radians(wind_angle - 180))
-                    wind_factor -= 0.015 * tailwind  # Decrease fuel by 1.5% per m/s tailwind
-        
+                    # Decrease fuel by 1.5% per m/s tailwind, but ensure we don't go below 50% of normal consumption
+                    segment_wind_factor = max(0.5, 1.0 - (0.015 * tailwind))
+                
+                # Apply this segment's wind factor (weight by segment proportion)
+                segment_proportion = 1.0 / (len(self.waypoints) - 1)  # Equal weight to each segment
+                wind_factor = wind_factor * (1.0 - segment_proportion) + segment_wind_factor * segment_proportion
+
+        # Apply minimum limit to wind factor to prevent negative fuel consumption
+        wind_factor = max(0.3, wind_factor)  # Never go below 30% of base consumption
+
         # Apply all factors
         total_fuel_kg = base_fuel_kg * wind_factor * altitude_factor * temperature_factor
         return total_fuel_kg
@@ -305,7 +367,39 @@ class Route:
             "fitness_score": self.fitness_score,
             "created_at": self.created_at.isoformat(),
             "reroute_history": getattr(self, "reroute_history", []),
+            "fuel_consumption": round(self.fuel_consumption, 2) if self.fuel_consumption else 0,
+            "estimated_time": {
+                "hours": int(self.estimated_time),
+                "minutes": int((self.estimated_time % 1) * 60) if self.estimated_time else 0
+            } if self.estimated_time else None
         }
+
+    @property
+    def average_bearing(self):
+        """Calculate the average bearing of the route."""
+        if len(self.waypoints) < 2:
+            return 0
+
+        # Calculate bearings between consecutive waypoints
+        bearings = []
+        for i in range(len(self.waypoints) - 1):
+            wp1 = self.waypoints[i]
+            wp2 = self.waypoints[i + 1]
+            bearing = math.atan2(
+                math.sin(math.radians(wp2.longitude - wp1.longitude))
+                * math.cos(math.radians(wp2.latitude)),
+                math.cos(math.radians(wp1.latitude))
+                * math.sin(math.radians(wp2.latitude))
+                - math.sin(math.radians(wp1.latitude))
+                * math.cos(math.radians(wp2.latitude))
+                * math.cos(math.radians(wp2.longitude - wp1.longitude)),
+            )
+            bearing = math.degrees(bearing)
+            bearing = (bearing + 360) % 360  # Normalize to 0-360
+            bearings.append(bearing)
+
+        # Return average bearing
+        return sum(bearings) / len(bearings)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Route":

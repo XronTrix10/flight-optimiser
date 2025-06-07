@@ -31,6 +31,10 @@ class RouteGenerator:
         if not os.path.exists(self.cache_dir):
             os.makedirs(self.cache_dir)
 
+    def filter_routes_for_optimization(self, routes):
+        """Filter out direct paths and other unsuitable routes for optimization."""
+        return [route for route in routes if route.path_type != "direct"]
+
     async def generate_alternative_routes(
         self,
         origin: Airport,

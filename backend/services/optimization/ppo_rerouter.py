@@ -33,7 +33,7 @@ class PPORerouter:
 
         for alt_route in alternative_routes:
             # Skip routes with previously used path types
-            if alt_route.path_type in self.used_route_types:
+            if alt_route.path_type in self.used_route_types or alt_route.path_type == "direct":
                 continue
 
             # Find closest waypoint in this alternative route
@@ -212,7 +212,7 @@ class PPORerouter:
 
             for alt_route in alternative_routes:
                 # Skip routes with previously used path types
-                if alt_route.path_type in self.used_route_types:
+                if alt_route.path_type in self.used_route_types or alt_route.path_type == "direct":
                     continue
 
                 # Find closest waypoint in this alternative route
@@ -420,6 +420,10 @@ class PPORerouter:
             )
             rerouted_route.fuel_consumption_kg = fuel_kg
             logger.info(f"Calculated fuel consumption: {fuel_kg:.2f} kg")
+
+            # Calculate flight time
+            flight_time = rerouted_route.calculate_estimated_time(self.aircraft)
+            rerouted_route.estimated_time = flight_time
 
         logger.info(
             f"Created rerouted path with {len(rerouted_route.waypoints)} waypoints"

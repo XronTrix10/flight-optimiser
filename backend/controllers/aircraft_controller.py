@@ -22,8 +22,8 @@ async def get_all_aircraft():
 
 @router.get("/{model}", response_model=List[Dict[str, Any]])
 async def get_aircraft(model: str, request: Request):
-    """Get aircraft details by model name. 
-    
+    """Get aircraft details by model name.
+
     Can filter by additional specifications as query parameters.
     If no query parameters are provided, returns all aircraft with matching model name.
     """
@@ -33,20 +33,19 @@ async def get_aircraft(model: str, request: Request):
         for key, value in request.query_params.items():
             if key != "model":  # Skip the model parameter
                 specs[key] = value
-                
+
         # Get matching aircraft
         matching_aircraft = await aircraft_api.get_aircraft(model, **specs)
-        
+
         if not matching_aircraft:
             raise HTTPException(
-                status_code=404, 
-                detail=f"No aircraft models matching '{model}'{' with given specifications' if specs else ''} found"
+                status_code=404,
+                detail=f"No aircraft models matching '{model}'{' with given specifications' if specs else ''} found",
             )
-            
+
         # Return list of aircraft
         return [ac.to_dict() for ac in matching_aircraft]
-        
+
     except Exception as e:
         logger.error(f"Error fetching aircraft {model}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-
