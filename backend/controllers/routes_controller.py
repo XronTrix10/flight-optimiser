@@ -147,83 +147,6 @@ async def generate_routes(route_request: RouteRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{route_id}", response_model=Dict[str, Any])
-async def get_route(route_id: str):
-    """Get a specific route by ID."""
-    # In a real implementation, this would retrieve from a database
-    # For now, we'll return a 404 as we don't have persistence
-    raise HTTPException(status_code=404, detail=f"Route {route_id} not found")
-
-
-@router.post("/block-waypoint", response_model=Dict[str, Any])
-async def block_waypoint(request: BlockWaypointRequest):
-    """Register a blocked waypoint and recalculate the route."""
-    from realtime.route_adjuster import route_adjuster
-
-    try:
-        new_route = await route_adjuster.handle_blocked_waypoint(
-            request.route_id, request.waypoint_id
-        )
-
-        if not new_route:
-            raise HTTPException(
-                status_code=404, detail=f"Route {request.route_id} not found"
-            )
-
-        return {"new_route": new_route.to_dict()}
-
-    except Exception as e:
-        logger.error(f"Error handling blocked waypoint: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/optimize", response_model=Dict[str, Any])
-async def optimize_routes(optimization_request: RouteOptimizationRequest):
-    """Optimize a set of routes using the specified method."""
-    try:
-        logger.info(f"Optimizing routes using {optimization_request.method} method")
-
-        # Convert route dictionaries to Route objects
-        routes = [
-            Route.from_dict(route_data) for route_data in optimization_request.routes
-        ]
-
-        if not routes:
-            raise HTTPException(
-                status_code=400, detail="No routes provided for optimization"
-            )
-
-        # Get optimizer based on method
-        optimizer = optimizer_factory.get_optimizer(optimization_request.method)
-
-        # Set iterations if provided
-        if hasattr(optimizer, "iterations"):
-            optimizer.iterations = optimization_request.iterations
-
-        # Perform optimization
-        import time
-
-        start_time = time.time()
-        optimized_route = optimizer.optimize(routes)
-        execution_time_ms = (time.time() - start_time) * 1000
-
-        if not optimized_route:
-            raise HTTPException(
-                status_code=500, detail="Optimization failed to produce a valid route"
-            )
-
-        return {
-            "optimized_route": optimized_route.to_dict(),
-            "optimization_method": optimization_request.method,
-            "fitness_score": optimized_route.fitness_score,
-            "execution_time_ms": execution_time_ms,
-        }
-
-    except Exception as e:
-        logger.error(f"Error optimizing routes: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.post("/reroute", response_model=Dict[str, Any])
 async def reroute_flight(reroute_request: RerouteRequest):
     """Dynamically reroute a flight when encountering a blocked waypoint using PPO."""
@@ -351,4 +274,192 @@ async def reroute_flight(reroute_request: RerouteRequest):
 
     except Exception as e:
         logger.error(f"Error rerouting flight: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/ccu-routes", response_model=Dict[str, Any])
+async def get_ccu_routes():
+    """
+    Generate and return optimized routes from CCU (Kolkata) to all available destinations.
+
+    Returns:
+        Dictionary containing routes to all available destinations from CCU
+    """
+    try:
+        logger.info("Generating routes from CCU to all available destinations")
+
+        # Get all airports
+        airports = airport_api.fetch_airports()
+        airport_dict = {airport.iata_code: airport for airport in airports}
+
+        # Verify CCU exists
+        if "CCU" not in airport_dict:
+            raise HTTPException(
+                status_code=404, detail="Origin airport CCU (Kolkata) not found"
+            )
+
+        origin = airport_dict["CCU"]
+
+        # Get available destinations from CCU
+        routes = airport_api.fetch_routes()
+
+        # Check if CCU has any destinations
+        if "CCU" not in routes:
+            return {"message": "No destinations found for CCU airport", "routes": []}
+
+        destination_codes = routes["CCU"]
+
+        # Get default aircraft for calculations
+        default_aircraft = await aircraft_api.get_aircraft("Jet")
+        if default_aircraft and len(default_aircraft) > 0:
+            aircraft = default_aircraft[0]
+        else:
+            aircraft = None
+
+        # Generate routes to each destination
+        all_routes = []
+
+        for dest_code in destination_codes:
+            # Skip if destination airport not found
+            if dest_code not in airport_dict:
+                logger.warning(
+                    f"Destination airport {dest_code} not found in airport database"
+                )
+                continue
+
+            destination = airport_dict[dest_code]
+
+            # Generate route (using just direct route type for efficiency)
+            routes = await route_generator.generate_alternative_routes(
+                origin=origin,
+                destination=destination,
+                route_types=["direct"],
+                aircraft_model=aircraft.model if aircraft else None,
+                use_cache=True,
+            )
+
+            # Skip if no routes could be generated
+            if not routes:
+                logger.warning(f"No routes could be generated from CCU to {dest_code}")
+                continue
+
+            # Use optimizer to find best route
+            optimizer = optimizer_factory.get_optimizer("aco")  # Default to ACO
+            optimized_route = optimizer.optimize(routes)
+
+            if optimized_route:
+                # Add fuel consumption and time estimates if aircraft is available
+                if aircraft:
+                    optimized_route.fuel_consumption = (
+                        optimized_route.calculate_fuel_consumption(
+                            aircraft, optimized_route.weather_data
+                        )
+                    )
+                    optimized_route.estimated_time = (
+                        optimized_route.calculate_estimated_time(aircraft)
+                    )
+
+                # Add to results
+                all_routes.append(
+                    {
+                        "destination": {
+                            "code": destination.iata_code,
+                            "name": destination.name,
+                            "city": destination.city,
+                            "country": destination.country,
+                        },
+                        "route": optimized_route.to_dict(),
+                    }
+                )
+
+        return {
+            "origin": {
+                "code": origin.iata_code,
+                "name": origin.name,
+                "city": origin.city,
+                "country": origin.country,
+            },
+            "route_count": len(all_routes),
+            "routes": all_routes,
+        }
+
+    except Exception as e:
+        logger.error(f"Error generating routes from CCU: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{route_id}", response_model=Dict[str, Any])
+async def get_route(route_id: str):
+    """Get a specific route by ID."""
+    # In a real implementation, this would retrieve from a database
+    # For now, we'll return a 404 as we don't have persistence
+    raise HTTPException(status_code=404, detail=f"Route {route_id} not found")
+
+
+@router.post("/block-waypoint", response_model=Dict[str, Any])
+async def block_waypoint(request: BlockWaypointRequest):
+    """Register a blocked waypoint and recalculate the route."""
+    from realtime.route_adjuster import route_adjuster
+
+    try:
+        new_route = await route_adjuster.handle_blocked_waypoint(
+            request.route_id, request.waypoint_id
+        )
+
+        if not new_route:
+            raise HTTPException(
+                status_code=404, detail=f"Route {request.route_id} not found"
+            )
+
+        return {"new_route": new_route.to_dict()}
+
+    except Exception as e:
+        logger.error(f"Error handling blocked waypoint: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/optimize", response_model=Dict[str, Any])
+async def optimize_routes(optimization_request: RouteOptimizationRequest):
+    """Optimize a set of routes using the specified method."""
+    try:
+        logger.info(f"Optimizing routes using {optimization_request.method} method")
+
+        # Convert route dictionaries to Route objects
+        routes = [
+            Route.from_dict(route_data) for route_data in optimization_request.routes
+        ]
+
+        if not routes:
+            raise HTTPException(
+                status_code=400, detail="No routes provided for optimization"
+            )
+
+        # Get optimizer based on method
+        optimizer = optimizer_factory.get_optimizer(optimization_request.method)
+
+        # Set iterations if provided
+        if hasattr(optimizer, "iterations"):
+            optimizer.iterations = optimization_request.iterations
+
+        # Perform optimization
+        import time
+
+        start_time = time.time()
+        optimized_route = optimizer.optimize(routes)
+        execution_time_ms = (time.time() - start_time) * 1000
+
+        if not optimized_route:
+            raise HTTPException(
+                status_code=500, detail="Optimization failed to produce a valid route"
+            )
+
+        return {
+            "optimized_route": optimized_route.to_dict(),
+            "optimization_method": optimization_request.method,
+            "fitness_score": optimized_route.fitness_score,
+            "execution_time_ms": execution_time_ms,
+        }
+
+    except Exception as e:
+        logger.error(f"Error optimizing routes: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
